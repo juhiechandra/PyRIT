@@ -15,6 +15,7 @@ import {
   HistoryRegular,
   PersonFeedbackRegular,
   ScriptRegular,
+  TableRegular,
   WrenchRegular,
   OpenRegular,
   WeatherMoonRegular,
@@ -32,6 +33,7 @@ export type ViewName =
   | 'targets'
   | 'initializers'
   | 'configuration'
+  | 'scenarioHistory'
   | 'scenarios'
 
 interface NavigationProps {
@@ -120,6 +122,16 @@ export default function Navigation({
           onClick={() => onNavigate('scenarios')}
         />
 
+        <Button
+          className={styles.navButton}
+          data-active={currentView === 'scenarioHistory'}
+          appearance="subtle"
+          icon={<TableRegular />}
+          title="Scenario History"
+          aria-label="Scenario History"
+          aria-current={currentView === 'scenarioHistory' ? 'page' : undefined}
+          onClick={() => onNavigate('scenarioHistory')}
+        />
         <Button
           className={styles.navButton}
           data-active={currentView === 'targets'}
