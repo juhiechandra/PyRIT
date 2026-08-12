@@ -112,6 +112,7 @@ if TYPE_CHECKING:
         ScenarioProgressResult,
         ScenarioRunPlan,
         ScenarioRunPlanAtomicGroup,
+        ScenarioRunPlanGroupKind,
         ScenarioRunPlanSeedGroup,
         ScenarioRunProgress,
     )
@@ -263,6 +264,7 @@ _LAZY_EXPORTS: dict[str, str] = {
     "ScenarioProgressResult": "pyrit.models.scenario_progress",
     "ScenarioRunPlan": "pyrit.models.scenario_progress",
     "ScenarioRunPlanAtomicGroup": "pyrit.models.scenario_progress",
+    "ScenarioRunPlanGroupKind": "pyrit.models.scenario_progress",
     "ScenarioRunPlanSeedGroup": "pyrit.models.scenario_progress",
     "ScenarioRunProgress": "pyrit.models.scenario_progress",
     "Seed": "pyrit.models.seeds",
