@@ -66,8 +66,8 @@ from pyrit.models.catalog.scenario import (
     AttackErrorSummary,
     AttackRetrySummary,
     RunScenarioRequest,
-    ScenarioRunListItem,
     ScenarioOverloadSummary,
+    ScenarioRunListItem,
     ScenarioRunSummary,
     ScenarioTargetSummary,
 )
