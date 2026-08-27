@@ -23,11 +23,11 @@ parameters:
   - name: datasetName
     displayName: Dataset name
     type: string
-    default: harmbench-balanced-14-v1
+    default: adversarial_benchmark_objectives
   - name: maxDatasetSize
     displayName: Maximum objectives
     type: number
-    default: 14
+    default: 40
   - name: maxConcurrency
     displayName: Maximum concurrency
     type: number
