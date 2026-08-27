@@ -16,10 +16,7 @@ parameters:
   - name: techniques
     displayName: Space-separated technique names
     type: string
-    default: >-
-      role_play_movie_script role_play_video_game role_play_trivia_game
-      role_play_persuasion role_play_persuasion_written red_teaming
-      context_compliance tap crescendo_simulated
+    default: role_play_video_game crescendo_simulated tap
   - name: datasetName
     displayName: Dataset name
     type: string
