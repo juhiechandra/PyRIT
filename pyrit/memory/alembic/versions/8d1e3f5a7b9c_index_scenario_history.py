@@ -5,7 +5,7 @@
 Index scenario results for descending history keyset pagination.
 
 Revision ID: 8d1e3f5a7b9c
-Revises: 6b8d0f2a4c1e
+Revises: 8e2c4a6b0d13
 Create Date: 2026-08-06 22:40:00.000000
 """
 
@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "8d1e3f5a7b9c"
-down_revision: str | None = "6b8d0f2a4c1e"
+down_revision: str | None = "8e2c4a6b0d13"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
