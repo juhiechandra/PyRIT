@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pyrit.analytics import get_cached_results_for_technique
 from pyrit.common import apply_defaults
+from pyrit.common.path import SCORER_SEED_PROMPT_PATH
 from pyrit.models import AttackOutcome, AttackResult, ObjectiveTargetEvaluationIdentifier, ScenarioResult
 from pyrit.models.parameter import Parameter
 from pyrit.registry import AttackTechniqueRegistry, TargetRegistry
@@ -19,6 +20,8 @@ from pyrit.scenario.core.matrix_atomic_attack_builder import MatrixAtomicAttackB
 from pyrit.scenario.core.scenario import BaselineAttackPolicy, Scenario
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from pyrit.prompt_target import PromptTarget
     from pyrit.scenario.core.atomic_attack import AtomicAttack
     from pyrit.scenario.core.scenario_context import ScenarioContext
@@ -97,14 +100,27 @@ class AdversarialBenchmark(Scenario):
     #: initializer registered rather than only core-tagged factories.
     #: Bumped from 3 → 4 when the no-selection default changed from the ``light``
     #: aggregate to ``role_play_video_game``, ``crescendo_simulated``, and ``tap``.
-    #: ``VERSION`` participates in resume identity, so v3 results cannot be resumed
-    #: as v4. The separate ``use_cached`` behavioral cache intentionally remains
+    #: Bumped from 4 → 5 when objective scoring changed from the registry-selected
+    #: default to task-achievement evaluation that supports the benchmark's broad
+    #: behavior taxonomy.
+    #: ``VERSION`` participates in resume identity, so older results cannot be resumed
+    #: as v5. The separate ``use_cached`` behavioral cache intentionally remains
     #: keyed by technique and objective-target identity across scenario versions.
-    VERSION: int = 4
+    VERSION: int = 5
 
     #: AdversarialBenchmark compares attack-success rates across adversarial models; a baseline
     #: attack would be model-independent and contribute no signal to the comparison.
     BASELINE_ATTACK_POLICY: ClassVar[BaselineAttackPolicy] = BaselineAttackPolicy.Forbidden
+
+    @classmethod
+    def _get_additional_scoring_questions(cls) -> list[Path]:
+        """
+        Use objective fulfillment rather than a harm-category classifier.
+
+        Returns:
+            list[Path]: The task-achievement scoring rubric.
+        """
+        return [SCORER_SEED_PROMPT_PATH / "true_false_question" / "task_achieved_refined.yaml"]
 
     @classmethod
     def additional_parameters(cls) -> list[Parameter]:
@@ -151,11 +167,11 @@ class AdversarialBenchmark(Scenario):
 
         Args:
             objective_scorer: ``TrueFalseScorer`` used to evaluate attack
-                success. Defaults to the registered default objective
-                scorer (typically the composite refusal+scale scorer set
-                up by an initializer). Widening to general ``Scorer``
-                support (covering ``FloatScaleScorer``, etc.) is tracked
-                as a follow-up.
+                success. Defaults to task-achievement evaluation with a
+                refusal backstop so objectives outside Azure Content Safety's
+                four harm categories are evaluated correctly. Widening to
+                general ``Scorer`` support (covering ``FloatScaleScorer``,
+                etc.) is tracked as a follow-up.
             use_cached: When ``True``, ``_build_atomic_attacks_async`` filters
                 out atomic attacks for which the live behavioral cache
                 (``pyrit.analytics.get_cached_results_for_technique``) has

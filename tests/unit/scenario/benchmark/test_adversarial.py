@@ -37,6 +37,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from pyrit.common.path import SCORER_SEED_PROMPT_PATH
 from pyrit.executor.attack import AttackScoringConfig, TreeOfAttacksWithPruningAttack
 from pyrit.memory.memory_interface import MemoryInterface
 from pyrit.models import (
@@ -159,13 +160,18 @@ async def _build_atomic_attacks(bench: AdversarialBenchmark) -> list:
 class TestAdversarialBenchmarkMetadata:
     """Tests for class-level metadata that doesn't depend on any runtime state."""
 
-    def test_version_is_4(self):
-        """VERSION 4 identifies runs using the evidence-backed default technique set."""
-        assert AdversarialBenchmark.VERSION == 4
+    def test_version_is_5(self):
+        """VERSION 5 identifies runs using task-achievement objective scoring."""
+        assert AdversarialBenchmark.VERSION == 5
 
     def test_baseline_attack_policy_is_forbidden(self):
         """A baseline contributes no signal to a model-comparison benchmark, so it is forbidden."""
         assert AdversarialBenchmark.BASELINE_ATTACK_POLICY is BaselineAttackPolicy.Forbidden
+
+    def test_task_achieved_rubric_is_used(self):
+        expected = SCORER_SEED_PROMPT_PATH / "true_false_question" / "task_achieved_refined.yaml"
+
+        assert AdversarialBenchmark._get_additional_scoring_questions() == [expected]
 
 
 # ---------------------------------------------------------------------------
