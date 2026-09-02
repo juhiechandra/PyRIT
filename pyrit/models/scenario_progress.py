@@ -33,6 +33,8 @@ class ScenarioRunPlanAtomicGroup(BaseModel):
     display_group: str
     technique_eval_hash: str
     seed_group_ids: list[str]
+
+
 class ScenarioRunPlan(BaseModel):
     """Versioned normalized execution plan persisted in ScenarioResult metadata."""
 
