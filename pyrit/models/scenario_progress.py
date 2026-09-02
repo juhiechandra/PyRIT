@@ -3,7 +3,6 @@
 
 """Canonical models for durable scenario run plans and incremental progress."""
 
-from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
@@ -86,6 +85,7 @@ class ScenarioRunPlanAtomicGroup(BaseModel):
     display_group: str
     technique_eval_hash: str
     seed_group_ids: list[str]
+    group_kind: ScenarioRunPlanGroupKind | None = None
 
 
 class ScenarioRunPlan(BaseModel):

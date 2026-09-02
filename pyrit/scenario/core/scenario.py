@@ -44,6 +44,7 @@ from pyrit.models import (
     ScenarioResult,
     ScenarioRunPlan,
     ScenarioRunPlanAtomicGroup,
+    ScenarioRunPlanGroupKind,
     ScenarioRunPlanSeedGroup,
     ScenarioRunSizeComponent,
     ScenarioRunState,
@@ -1014,7 +1015,7 @@ class Scenario(ABC):
                 self._apply_persisted_objectives(stored_result=stored_result)
                 reconstructed_plan = self._build_run_plan()
                 metadata = dict(stored_result.metadata)
-                metadata[SCENARIO_RUN_PLAN_METADATA_KEY] = reconstructed_plan.model_dump(mode="json")
+                metadata[SCENARIO_RUN_PLAN_METADATA_KEY] = reconstructed_plan.model_dump(mode="json", exclude_none=True)
                 self._memory.update_scenario_metadata(
                     scenario_result_id=self._scenario_result_id,
                     metadata=metadata,
@@ -1073,7 +1074,7 @@ class Scenario(ABC):
                         seen.add(sha)
                         hashes.append(sha)
             metadata["objective_hashes"] = hashes
-        metadata[SCENARIO_RUN_PLAN_METADATA_KEY] = self._build_run_plan().model_dump(mode="json")
+        metadata[SCENARIO_RUN_PLAN_METADATA_KEY] = self._build_run_plan().model_dump(mode="json", exclude_none=True)
         return metadata
 
     def _build_run_plan(self) -> ScenarioRunPlan:
@@ -1111,6 +1112,11 @@ class Scenario(ABC):
                     display_group=atomic_attack.display_group,
                     technique_eval_hash=technique_eval_hash,
                     seed_group_ids=seed_group_ids,
+                    group_kind=getattr(
+                        atomic_attack,
+                        "_progress_group_kind",
+                        ScenarioRunPlanGroupKind.ATTACK,
+                    ),
                 )
             )
         return ScenarioRunPlan(
