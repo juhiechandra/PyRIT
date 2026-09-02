@@ -1,4 +1,4 @@
-dataset_name: adversarial_benchmark_objectives
+dataset_name: adversarial_benchmark_v1
 source: p2m_verified
 description: Random sample of five P2M verified objectives per harm category (sampling seed 20260826).
 seeds:

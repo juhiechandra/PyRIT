@@ -20,7 +20,7 @@ parameters:
   - name: datasetName
     displayName: Dataset name
     type: string
-    default: adversarial_benchmark_objectives
+    default: adversarial_benchmark_v1
   - name: maxDatasetSize
     displayName: Maximum objectives
     type: number

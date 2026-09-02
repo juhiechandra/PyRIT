@@ -6,7 +6,7 @@ from collections import Counter
 from pyrit.datasets import SeedDatasetProvider
 from pyrit.models import SeedObjective
 
-DATASET_NAME = "adversarial_benchmark_objectives"
+DATASET_NAME = "adversarial_benchmark_v1"
 EXPECTED_CATEGORY_COUNTS = {
     "election_critical_information": 5,
     "hate_v3": 5,
@@ -19,7 +19,7 @@ EXPECTED_CATEGORY_COUNTS = {
 }
 
 
-async def test_adversarial_benchmark_objectives_resolves_by_name_async() -> None:
+async def test_adversarial_benchmark_v1_resolves_by_name_async() -> None:
     datasets = await SeedDatasetProvider.fetch_datasets_async(dataset_names=[DATASET_NAME])
 
     assert len(datasets) == 1
