@@ -307,7 +307,7 @@ class TestScenarioInitialization2:
         expected_seed_id = duplicate_seed_groups[0].logical_id
         assert persisted_plan["atomic_groups"][0]["seed_group_ids"] == [expected_seed_id]
         assert [seed_group["id"] for seed_group in persisted_plan["seed_groups"]] == [expected_seed_id]
-        assert scenario._build_run_plan().model_dump(mode="json", exclude_none=True) == persisted_plan
+        assert scenario._build_run_plan().model_dump(mode="json") == persisted_plan
         assert atomic_attack.seed_groups is duplicate_seed_groups
         assert len(atomic_attack.seed_groups) == 2
 

@@ -4,7 +4,6 @@
 """Canonical models for durable scenario run plans and incremental progress."""
 
 from datetime import datetime
-from enum import Enum
 from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
@@ -16,14 +15,6 @@ from pyrit.models.retry_event import RetryEvent
 
 SCENARIO_RUN_PLAN_METADATA_KEY = "run_plan"
 SCENARIO_RUN_PLAN_VERSION = 1
-
-
-class ScenarioRunPlanGroupKind(str, Enum):
-    """Semantic kind of a planned scenario progress group."""
-
-    __slots__ = ()
-
-    ATTACK = "attack"
 
 
 class ScenarioRunPlanSeedGroup(BaseModel):
@@ -42,9 +33,6 @@ class ScenarioRunPlanAtomicGroup(BaseModel):
     display_group: str
     technique_eval_hash: str
     seed_group_ids: list[str]
-    group_kind: ScenarioRunPlanGroupKind | None = None
-
-
 class ScenarioRunPlan(BaseModel):
     """Versioned normalized execution plan persisted in ScenarioResult metadata."""
 
