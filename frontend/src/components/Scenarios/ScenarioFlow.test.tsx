@@ -7,7 +7,7 @@ import { useScenarioRunProgress } from '@/hooks/useScenarioRunProgress'
 import { scenariosApi, targetsApi } from '@/services/api'
 import type {
   RegisteredScenario,
-  ScenarioDefaultRunSizeEstimate,
+  ScenarioRunSizeEstimateResponse,
   TargetInstance,
 } from '@/types'
 import type { ScenarioRunProgressState } from '@/utils/scenarioRunProgress'
@@ -56,19 +56,20 @@ const SCENARIO: RegisteredScenario = {
     default_technique: ['crescendo'],
   },
   all_techniques: ['crescendo'],
+  technique_summaries: [{
+    name: 'crescendo',
+    description: null,
+    tags: [],
+  }],
   default_datasets: ['harmbench'],
-  default_dataset_summaries: [],
   baseline_policy: 'enabled',
   include_baseline_by_default: true,
   supported_parameters: [],
   default_run_size: {
-    version: 1,
-    status: 'exact',
-    total_attack_count: 2,
+    estimated_attack_count: 2,
     components: [],
     datasets: [],
     note: null,
-    retries_included: false,
   },
 }
 
@@ -80,20 +81,16 @@ const TARGET: TargetInstance = {
   },
 }
 
-const ESTIMATE: ScenarioDefaultRunSizeEstimate = {
-  version: 1,
-  status: 'exact',
-  total_attack_count: 2,
+const ESTIMATE: ScenarioRunSizeEstimateResponse = {
+  estimated_attack_count: 2,
   components: [{
     label: 'Configured attacks',
     count: 2,
-    factors: [],
     is_baseline: false,
     note: null,
   }],
   datasets: [],
   note: null,
-  retries_included: false,
 }
 
 const RUN_STATE: ScenarioRunProgressState = {
@@ -180,7 +177,7 @@ describe('Scenario catalog-to-run integration', () => {
 
     const expectedEstimateRequest = {
       target_name: TARGET.target_registry_name,
-      techniques: ['default_technique'],
+      techniques: SCENARIO.default_techniques,
       include_baseline: true,
     }
     await waitFor(() => expect(mockEstimateRun).toHaveBeenLastCalledWith(
@@ -188,10 +185,12 @@ describe('Scenario catalog-to-run integration', () => {
       expectedEstimateRequest,
       expect.any(AbortSignal),
     ))
-    expect(within(screen.getByRole('complementary', { name: 'Run preview' }))
-      .getByText('2 planned attacks')).toBeInTheDocument()
+    const estimate = screen.getByRole('region', { name: 'Run estimate' })
+    expect(within(estimate).getByText('Total atomic attacks').parentElement).toHaveTextContent('2')
 
     await user.click(screen.getByTestId('launch-scenario-btn'))
+    const preview = await screen.findByRole('dialog', { hidden: true })
+    await user.click(within(preview).getByTestId('confirm-launch-scenario-btn'))
 
     await waitFor(() => expect(mockStartRun).toHaveBeenCalledWith({
       scenario_name: SCENARIO_NAME,
