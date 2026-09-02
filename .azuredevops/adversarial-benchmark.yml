@@ -24,7 +24,7 @@ parameters:
   - name: maxDatasetSize
     displayName: Maximum objectives
     type: number
-    default: 40
+    default: 120
   - name: maxConcurrency
     displayName: Maximum concurrency
     type: number
