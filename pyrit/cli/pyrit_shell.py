@@ -506,6 +506,7 @@ class PyRITShell(cmd.Cmd):
         request = RunScenarioRequest(**request_kwargs)
 
         # Start run
+        total_techniques = len(request.techniques or [])
         print(f"\nRunning scenario: {scenario_name}")
         sys.stdout.flush()
 
@@ -523,7 +524,7 @@ class PyRITShell(cmd.Cmd):
         try:
             while True:
                 run = self._run_async(self._api_client.get_scenario_run_async(scenario_result_id=scenario_result_id))
-                print_scenario_run_progress(run=run)
+                print_scenario_run_progress(run=run, total_techniques=total_techniques)
                 if run.status in {
                     ScenarioRunState.COMPLETED,
                     ScenarioRunState.FAILED,
