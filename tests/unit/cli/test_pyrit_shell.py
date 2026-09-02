@@ -895,6 +895,17 @@ class TestDoScenarioResults:
         assert "obj-beta" in out
         assert "tech_a" in out
 
+    def test_attacks_view_disables_colors_for_redirected_output(self, shell):
+        s, client = shell
+        client.get_scenario_run_results_async = AsyncMock(return_value=_attacks_scenario_result())
+        with (
+            patch("pyrit.output.output_scenario_attacks_async", new_callable=AsyncMock) as mock_output,
+            patch.object(pyrit_shell.sys.stdout, "isatty", return_value=False),
+        ):
+            s.do_scenario_results("rid-1 --view attacks")
+
+        assert mock_output.await_args.kwargs["enable_colors"] is False
+
     def test_attacks_view_respects_limit(self, shell, capsys):
         s, client = shell
         client.get_scenario_run_results_async = AsyncMock(return_value=_attacks_scenario_result())

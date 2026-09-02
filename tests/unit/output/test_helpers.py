@@ -6,9 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from pyrit.output.helpers import (
+    ScenarioResultOutputFormat,
     output_attack_async,
     output_conversation_async,
     output_scenario_async,
+    output_scenario_attacks_async,
+    output_scenario_technique_metrics_async,
     output_score_async,
     output_scorer_async,
 )
@@ -113,6 +116,81 @@ async def test_output_scenario_async_forwards_sort_groups_by_success_rate(mock_c
 
     assert mock_cls.call_args.kwargs["sort_groups_by_success_rate"] is True
     mock_printer.write_async.assert_called_once_with(result)
+
+
+@patch("pyrit.output.helpers.PrettyScenarioResultMemoryPrinter")
+async def test_output_scenario_async_forwards_enable_colors(mock_cls):
+    mock_printer = MagicMock()
+    mock_printer.write_async = AsyncMock()
+    mock_cls.return_value = mock_printer
+    result = MagicMock()
+
+    await output_scenario_async(result, enable_colors=False)
+
+    assert mock_cls.call_args.kwargs["enable_colors"] is False
+
+
+@patch("pyrit.output.helpers.PrettyScenarioAttacksPrinter")
+async def test_output_scenario_attacks_async_pretty(mock_cls):
+    mock_printer = MagicMock()
+    mock_printer.write_async = AsyncMock()
+    mock_cls.return_value = mock_printer
+    result = MagicMock(id="scenario-id", attack_results={})
+
+    await output_scenario_attacks_async(result, enable_colors=False)
+
+    assert mock_cls.call_args.kwargs["enable_colors"] is False
+    mock_printer.write_async.assert_awaited_once()
+
+
+@patch("pyrit.output.helpers.JsonScenarioAttacksPrinter")
+async def test_output_scenario_attacks_async_accepts_string_format(mock_cls):
+    mock_printer = MagicMock()
+    mock_printer.write_async = AsyncMock()
+    mock_cls.return_value = mock_printer
+    result = MagicMock(id="scenario-id", attack_results={})
+
+    await output_scenario_attacks_async(result, format="json")
+
+    mock_printer.write_async.assert_awaited_once()
+
+
+async def test_output_scenario_attacks_async_rejects_csv():
+    result = MagicMock(id="scenario-id", attack_results={})
+
+    with pytest.raises(ValueError, match="Unsupported format"):
+        await output_scenario_attacks_async(result, format=ScenarioResultOutputFormat.CSV)
+
+
+@patch("pyrit.output.helpers.CsvScenarioTechniqueMetricsPrinter")
+async def test_output_scenario_technique_metrics_async_csv(mock_cls):
+    mock_printer = MagicMock()
+    mock_printer.write_async = AsyncMock()
+    mock_cls.return_value = mock_printer
+    result = MagicMock(attack_results={}, display_group_map={})
+
+    await output_scenario_technique_metrics_async(result, format=ScenarioResultOutputFormat.CSV)
+
+    mock_printer.write_async.assert_awaited_once()
+
+
+@patch("pyrit.output.helpers.JsonScenarioTechniqueMetricsPrinter")
+async def test_output_scenario_technique_metrics_async_accepts_string_format(mock_cls):
+    mock_printer = MagicMock()
+    mock_printer.write_async = AsyncMock()
+    mock_cls.return_value = mock_printer
+    result = MagicMock(attack_results={}, display_group_map={})
+
+    await output_scenario_technique_metrics_async(result, format="json")
+
+    mock_printer.write_async.assert_awaited_once()
+
+
+async def test_output_scenario_technique_metrics_async_rejects_unknown_format():
+    result = MagicMock(attack_results={}, display_group_map={})
+
+    with pytest.raises(ValueError, match="'yaml' is not a valid ScenarioResultOutputFormat"):
+        await output_scenario_technique_metrics_async(result, format="yaml")
 
 
 @patch("pyrit.output.helpers.PrettyAttackResultMemoryPrinter")

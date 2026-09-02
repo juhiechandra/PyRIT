@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import logging
 import math
+import os
 import sys
 from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter
 from pathlib import Path
@@ -794,10 +795,10 @@ async def _handle_results_async(*, client: Any, parsed_args: Namespace) -> int:
     from pyrit.cli._cli_args import ScenarioResultView
     from pyrit.cli._results import (
         apply_view_limit_policy,
-        build_attacks_table_payload,
         build_conversations_payload_async,
         resolve_view,
     )
+    from pyrit.output import ScenarioResultOutputFormat, output_scenario_attacks_async
 
     scenario_result_id = parsed_args.scenario_result_id
     view = resolve_view(view=parsed_args.view)
@@ -814,13 +815,13 @@ async def _handle_results_async(*, client: Any, parsed_args: Namespace) -> int:
         return 0
 
     if view in (ScenarioResultView.ATTACKS, ScenarioResultView.FULL):
-        attacks_payload = build_attacks_table_payload(
+        await output_scenario_attacks_async(
             result=result,
-            scenario_result_id=scenario_result_id,
             attack_result_ids=parsed_args.attack_result_ids,
             limit=limit,
+            format=ScenarioResultOutputFormat.PRETTY,
+            enable_colors=sys.stdout.isatty() and not os.environ.get("NO_COLOR"),
         )
-        _output.print_attacks_table(payload=attacks_payload)
         if view is ScenarioResultView.ATTACKS:
             return 0
 
