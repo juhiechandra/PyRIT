@@ -372,7 +372,11 @@ jest.mock("./components/Scenarios/ScenarioDetail", () => {
 });
 
 jest.mock("./components/Scenarios/ScenarioRunPage", () => {
-  const MockScenarioRunPage = () => <div data-testid="scenario-run-page" />;
+  const { useLocation } = jest.requireActual<typeof import("react-router")>("react-router");
+  const MockScenarioRunPage = () => {
+    const location = useLocation();
+    return <div data-testid="scenario-run-page" data-location={location.pathname} />;
+  };
   MockScenarioRunPage.displayName = "MockScenarioRunPage";
   return {
     __esModule: true,
@@ -470,14 +474,36 @@ describe("App", () => {
     expect(screen.getByTestId("scenario-detail")).toBeInTheDocument();
   });
 
-  it("renders the scenario run dashboard and marks the sidebar current when deep-linked to /scenario-history/:id", () => {
-    renderApp("/scenario-history/sr-123");
+  it("renders the scanner run dashboard and marks the sidebar current when deep-linked to /scanner-history/:id", () => {
+    renderApp("/scanner-history/sr-123");
 
     expect(screen.getByTestId("main-layout")).toHaveAttribute(
       "data-current-view",
       "scenarios"
     );
     expect(screen.getByTestId("scenario-run-page")).toBeInTheDocument();
+  });
+
+  it("renders the scanner run dashboard for a direct attack detail link", () => {
+    renderApp("/scanner-history/sr-123/attack-456");
+
+    expect(screen.getByTestId("main-layout")).toHaveAttribute(
+      "data-current-view",
+      "scenarios"
+    );
+    expect(screen.getByTestId("scenario-run-page")).toHaveAttribute(
+      "data-location",
+      "/scanner-history/sr-123/attack-456"
+    );
+  });
+
+  it("redirects legacy scenario-history links to scanner-history", async () => {
+    renderApp("/scenario-history/sr-123");
+
+    expect(await screen.findByTestId("scenario-run-page")).toHaveAttribute(
+      "data-location",
+      "/scanner-history/sr-123"
+    );
   });
 
   it("switches to the scenarios view via the sidebar", () => {

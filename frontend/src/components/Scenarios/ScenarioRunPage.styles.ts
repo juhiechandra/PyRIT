@@ -119,6 +119,12 @@ export const useScenarioRunPageStyles = makeStyles({
     flexWrap: 'wrap',
     gap: tokens.spacingHorizontalM,
   },
+  objectivesHeading: {
+    display: 'flex',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: tokens.spacingHorizontalM,
+  },
   sectionHint: {
     color: tokens.colorNeutralForeground3,
   },
@@ -178,6 +184,18 @@ export const useScenarioRunPageStyles = makeStyles({
     justifyContent: 'space-between',
     gap: tokens.spacingHorizontalS,
   },
+  detailLinkButton: {
+    ...mobileTouchTarget,
+    justifyContent: 'flex-start',
+    minWidth: 0,
+    paddingInline: 0,
+    color: tokens.colorBrandForegroundLink,
+    fontWeight: tokens.fontWeightSemibold,
+    textDecorationLine: 'none',
+    ':hover': {
+      textDecorationLine: 'underline',
+    },
+  },
   summaryStats: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
@@ -199,19 +217,71 @@ export const useScenarioRunPageStyles = makeStyles({
     minWidth: '64rem',
     tableLayout: 'auto',
   },
+  highlightedTableHeader: {
+    backgroundColor: tokens.colorNeutralBackground3,
+  },
+  objectiveSuccessColumn: {
+    width: '12rem',
+    whiteSpace: 'nowrap',
+    textAlign: 'right',
+  },
   attemptsTable: {
-    minWidth: '68rem',
+    minWidth: '64rem',
     tableLayout: 'auto',
   },
-  clickableAttemptRow: {
-    cursor: 'pointer',
-    ':hover': {
-      backgroundColor: tokens.colorNeutralBackground1Hover,
+  displayGroupList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalS,
+  },
+  displayGroup: {
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusLarge,
+    overflow: 'hidden',
+    backgroundColor: tokens.colorNeutralBackground1,
+  },
+  displayGroupSummary: {
+    display: 'grid',
+    gridTemplateColumns: `${MINIMUM_TOUCH_TARGET_SIZE} minmax(18rem, 1fr) minmax(30rem, 1.4fr)`,
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalM,
+    minHeight: MINIMUM_TOUCH_TARGET_SIZE,
+    padding: tokens.spacingVerticalM,
+    [NARROW_VIEWPORT_QUERY]: {
+      gridTemplateColumns: `${MINIMUM_TOUCH_TARGET_SIZE} 1fr`,
+      gap: tokens.spacingVerticalS,
     },
-    ':focus-visible': {
-      outline: `2px solid ${tokens.colorStrokeFocus2}`,
-      outlineOffset: '-2px',
+  },
+  expandButton: {
+    ...mobileTouchTarget,
+    alignSelf: 'center',
+  },
+  displayGroupIdentity: {
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: 0,
+    gap: tokens.spacingVerticalXXS,
+    overflowWrap: 'anywhere',
+  },
+  displayGroupMetrics: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, minmax(6rem, 1fr))',
+    gap: tokens.spacingHorizontalM,
+    [NARROW_VIEWPORT_QUERY]: {
+      gridColumn: '1 / -1',
+      gridTemplateColumns: 'repeat(2, minmax(6rem, 1fr))',
     },
+  },
+  displayGroupMetric: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS,
+    whiteSpace: 'nowrap',
+  },
+  displayGroupPanel: {
+    padding: tokens.spacingVerticalM,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground2,
   },
   nowrap: {
     whiteSpace: 'nowrap',
@@ -224,26 +294,27 @@ export const useScenarioRunPageStyles = makeStyles({
     whiteSpace: 'nowrap',
     textOverflow: 'ellipsis',
   },
-  attackLink: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: MINIMUM_TOUCH_TARGET_SIZE,
-    minHeight: MINIMUM_TOUCH_TARGET_SIZE,
-    textDecorationLine: 'none',
-    borderRadius: tokens.borderRadiusMedium,
+  clickableAttemptRow: {
+    cursor: 'pointer',
     ':hover': {
-      backgroundColor: tokens.colorSubtleBackgroundHover,
+      backgroundColor: tokens.colorNeutralBackground1Hover,
     },
     ':focus-visible': {
       outline: `2px solid ${tokens.colorStrokeFocus2}`,
-      outlineOffset: '2px',
+      outlineOffset: '-2px',
     },
   },
-  objectiveButton: {
-    maxWidth: '26rem',
-    justifyContent: 'flex-start',
+  objectiveLinkButton: {
     ...mobileTouchTarget,
+    justifyContent: 'flex-start',
+    width: '100%',
+    paddingInline: 0,
+    color: tokens.colorBrandForegroundLink,
+    textAlign: 'left',
+    textDecorationLine: 'none',
+    ':hover': {
+      textDecorationLine: 'underline',
+    },
   },
   emptyState: {
     display: 'flex',
@@ -274,13 +345,47 @@ export const useScenarioRunPageStyles = makeStyles({
     gap: tokens.spacingVerticalM,
     overflowWrap: 'anywhere',
   },
-  detailGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-    gap: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalL}`,
-    [NARROW_VIEWPORT_QUERY]: {
-      gridTemplateColumns: '1fr',
-    },
+  attackDetailDialogSurface: {
+    width: 'min(92vw, 88rem)',
+    maxWidth: '88rem',
+    maxHeight: '90vh',
+    boxSizing: 'border-box',
+    overflow: 'hidden',
+  },
+  attackDetailDialogBody: {
+    minHeight: 0,
+    maxHeight: 'calc(90vh - 48px)',
+  },
+  attackDetailDialogContent: {
+    minHeight: 0,
+    overflowY: 'auto',
+  },
+  detailList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXS,
+    marginTop: tokens.spacingVerticalXS,
+  },
+  badgeList: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: tokens.spacingHorizontalXS,
+    marginTop: tokens.spacingVerticalXS,
+  },
+  seedPromptList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalS,
+    marginTop: tokens.spacingVerticalS,
+  },
+  seedPrompt: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalS,
+    padding: tokens.spacingVerticalM,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground2,
   },
   objective: {
     whiteSpace: 'pre-wrap',

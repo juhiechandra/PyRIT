@@ -2,6 +2,7 @@ import {
   attackConversationRoutePath,
   attackRoutePath,
   routerPathParamValue,
+  scenarioRunAttackRoutePath,
   scenarioRunProvenance,
   scenarioRunRoutePath,
 } from './routeParams'
@@ -57,6 +58,9 @@ describe('scenario run provenance routes', () => {
   })
 
   it('builds an encoded scenario-run route from a trusted persisted ID', () => {
-    expect(scenarioRunRoutePath('run/1')).toBe('/scenario-history/run%2F1')
+    expect(scenarioRunRoutePath('run/1')).toBe('/scanner-history/run%2F1')
+    expect(scenarioRunAttackRoutePath('run/1', 'attack/1')).toBe(
+      '/scanner-history/run%2F1/attack%2F1',
+    )
   })
 })

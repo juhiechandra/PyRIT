@@ -78,10 +78,12 @@ from pyrit.models import (
     RetryEvent,
     ScenarioAttackResultDelta,
     ScenarioIdentifier,
+    ScenarioProgressScore,
     ScenarioResult,
     ScenarioRunState,
     Score,
     ScorerIdentifier,
+    ScoreStatus,
     Seed,
     SeedDataset,
     SeedGroup,
@@ -3903,8 +3905,9 @@ class MemoryInterface(abc.ABC):
         """
         Return bounded scenario-linked result deltas in ascending keyset order.
 
-        This projection intentionally selects only progress fields and never
-        hydrates PromptMemoryEntry, ScoreEntry, or a full ScenarioResult.
+        This projection selects only progress fields and the linked objective
+        score. It never hydrates ORM relationships, prompt rows, or a full
+        ScenarioResult.
 
         Returns:
             tuple[list[ScenarioAttackResultDelta], bool]: The page and whether more rows exist.
@@ -3932,6 +3935,7 @@ class MemoryInterface(abc.ABC):
         statement = (
             select(
                 AttackResultEntry.id,
+                AttackResultEntry.conversation_id,
                 AttackResultEntry.objective,
                 AttackResultEntry.objective_sha256,
                 AttackResultEntry.atomic_attack_identifier,
@@ -3943,7 +3947,14 @@ class MemoryInterface(abc.ABC):
                 AttackResultEntry.error_type,
                 AttackResultEntry.error_message,
                 AttackResultEntry.attribution_data,
+                ScoreEntry.id.label("score_id"),
+                ScoreEntry.score_value,
+                ScoreEntry.score_type,
+                ScoreEntry.status.label("score_status"),
+                ScoreEntry.score_rationale,
+                ScoreEntry.scorer_class_identifier,
             )
+            .outerjoin(ScoreEntry, AttackResultEntry.last_score_id == ScoreEntry.id)
             .where(and_(*conditions))
             .order_by(AttackResultEntry.timestamp.asc(), AttackResultEntry.id.asc())
             .limit(limit + 1)
@@ -3963,9 +3974,20 @@ class MemoryInterface(abc.ABC):
                 if row.atomic_attack_identifier
                 else None
             )
+            score = None
+            if row.score_id is not None:
+                scorer_identifier = ComponentIdentifier.model_validate(row.scorer_class_identifier)
+                score = ScenarioProgressScore(
+                    scorer_name=scorer_identifier.class_name or "Unknown",
+                    score_type=row.score_type,
+                    status=ScoreStatus(row.score_status),
+                    score_value=row.score_value,
+                    score_rationale=row.score_rationale,
+                )
             deltas.append(
                 ScenarioAttackResultDelta(
                     attack_result_id=str(row.id),
+                    conversation_id=row.conversation_id,
                     objective=row.objective,
                     objective_sha256=row.objective_sha256,
                     atomic_attack_identifier=atomic_identifier,
@@ -3977,6 +3999,7 @@ class MemoryInterface(abc.ABC):
                     error_type=row.error_type,
                     error_message=row.error_message,
                     attribution_data=row.attribution_data or {},
+                    score=score,
                 )
             )
         return deltas, has_more

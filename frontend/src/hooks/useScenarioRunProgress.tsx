@@ -30,6 +30,7 @@ export function useScenarioRunProgress(scenarioResultId: string): UseScenarioRun
   const abortControllerRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollingStoppedRef = useRef(false)
+  const retriedRef = useRef(false)
 
   useEffect(() => {
     if (cursorScenarioResultIdRef.current !== scenarioResultId) {
@@ -39,6 +40,7 @@ export function useScenarioRunProgress(scenarioResultId: string): UseScenarioRun
 
     let active = true
     pollingStoppedRef.current = false
+    retriedRef.current = false
 
     const clearPollTimer = (): void => {
       if (timerRef.current !== null) {
@@ -65,6 +67,7 @@ export function useScenarioRunProgress(scenarioResultId: string): UseScenarioRun
 
         const appliedCursor = page.next_cursor ?? since
         cursorRef.current = appliedCursor
+        retriedRef.current = false
         dispatch({ type: 'apply-page', page, fresh: since === null })
 
         if (page.has_more) {
@@ -85,6 +88,17 @@ export function useScenarioRunProgress(scenarioResultId: string): UseScenarioRun
           return
         }
         const apiError = toApiError(error)
+        // A live dashboard should survive one blip. Retry once on the same cursor before
+        // surfacing the stale banner and handing control back to the user.
+        if (apiError.status !== 404 && !retriedRef.current) {
+          retriedRef.current = true
+          clearPollTimer()
+          timerRef.current = setTimeout(() => {
+            timerRef.current = null
+            void fetchPage(since)
+          }, SCENARIO_RUN_POLL_INTERVAL_MS)
+          return
+        }
         dispatch({
           type: 'request-failed',
           message: apiError.detail,
@@ -114,6 +128,7 @@ export function useScenarioRunProgress(scenarioResultId: string): UseScenarioRun
   const retry = useCallback((): void => {
     dispatch({ type: 'retry' })
     pollingStoppedRef.current = false
+    retriedRef.current = false
     setRetryEpoch((epoch) => epoch + 1)
   }, [])
 

@@ -28,39 +28,50 @@ import {
   ArrowLeftRegular,
   ArrowSyncRegular,
   CheckmarkCircleRegular,
+  ChevronDownRegular,
+  ChevronRightRegular,
   DismissCircleRegular,
   ErrorCircleRegular,
-  EyeRegular,
   StopRegular,
 } from '@fluentui/react-icons'
 import { Link, useNavigate, useParams } from 'react-router'
 
+import AttackAttemptDetails from '@/components/AttackResults/AttackAttemptDetails'
+import ObjectiveScorerDetails from '@/components/AttackResults/ObjectiveScorerDetails'
+import {
+  formatDuration,
+  formatTimestamp,
+  objectivePreview,
+} from '@/components/AttackResults/attackAttemptFormatting'
 import { useScenarioRunProgress } from '@/hooks/useScenarioRunProgress'
 import { scenariosApi } from '@/services/api'
 import { toApiError } from '@/services/errors'
 import type {
+  ScenarioProgressCounts,
+  ScenarioProgressHeader,
   ScenarioProgressResult,
+  ScenarioRunPlanSeedGroup,
   ScenarioRunState,
+  ScenarioTechniqueProgress,
 } from '@/types'
 import {
-  attackRoutePath,
+  attackConversationRoutePath,
   routerPathParamValue,
+  scenarioRunAttackRoutePath,
+  scenarioRunRoutePath,
 } from '@/utils/routeParams'
 import {
-  getAtomicGroupRollups,
   getElapsedMilliseconds,
   getEtaMilliseconds,
-  getOverallProgress,
-  getSeedGroupRollups,
-  getTechniqueRollups,
   isTerminalRunState,
 } from '@/utils/scenarioRunProgress'
 
+import AttackExecutionTable from './AttackExecutionTable'
+import { ObjectiveDetailsDialog, TechniqueDetailsDialog } from './ScenarioRunDialogs'
 import { useScenarioRunPageStyles } from './ScenarioRunPage.styles'
 
 const CLOCK_REFRESH_INTERVAL_MS = 1_000
-const OBJECTIVE_PREVIEW_LENGTH = 96
-const INTERACTIVE_ELEMENT_SELECTOR = 'a, button, input, select, textarea, [role="button"], [role="link"]'
+const MAX_VISIBLE_ATTEMPTS_PER_GROUP = 100
 
 const RUN_BADGE_COLORS: Record<ScenarioRunState, 'informative' | 'brand' | 'success' | 'danger' | 'warning'> = {
   CREATED: 'informative',
@@ -70,65 +81,91 @@ const RUN_BADGE_COLORS: Record<ScenarioRunState, 'informative' | 'brand' | 'succ
   CANCELLED: 'warning',
 }
 
-const OUTCOME_BADGE_COLORS: Record<ScenarioProgressResult['outcome'], 'success' | 'danger' | 'warning' | 'informative'> = {
-  success: 'success',
-  failure: 'danger',
-  error: 'warning',
-  undetermined: 'informative',
-}
-
 export default function ScenarioRunPage() {
-  const { scenarioResultId: encodedId } = useParams<{ scenarioResultId: string }>()
-  return <ScenarioRunPageContent key={encodedId} scenarioResultId={routerPathParamValue(encodedId)} />
+  const {
+    scenarioResultId: encodedScenarioResultId,
+    attackResultId: encodedAttackResultId,
+  } = useParams<{ scenarioResultId: string; attackResultId?: string }>()
+  return (
+    <ScenarioRunPageContent
+      key={encodedScenarioResultId}
+      scenarioResultId={routerPathParamValue(encodedScenarioResultId)}
+      attackResultId={encodedAttackResultId ? routerPathParamValue(encodedAttackResultId) : null}
+    />
+  )
 }
 
 interface ScenarioRunPageContentProps {
   readonly scenarioResultId: string
+  readonly attackResultId: string | null
 }
 
-function ScenarioRunPageContent({ scenarioResultId }: ScenarioRunPageContentProps) {
+function ScenarioRunPageContent({ scenarioResultId, attackResultId }: ScenarioRunPageContentProps) {
   const styles = useScenarioRunPageStyles()
   const navigate = useNavigate()
   const { state, retry, applyRunSummary } = useScenarioRunProgress(scenarioResultId)
-  const [nowMilliseconds, setNowMilliseconds] = useState(() => Date.now())
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
-  const [selectedAttempt, setSelectedAttempt] = useState<ScenarioProgressResult | null>(null)
-  const detailsTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [selectedTechnique, setSelectedTechnique] = useState<ScenarioTechniqueProgress | null>(null)
+  const [selectedObjective, setSelectedObjective] = useState<ScenarioRunPlanSeedGroup | null>(null)
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set())
+  const detailsTriggerRef = useRef<HTMLElement | null>(null)
 
-  const overall = useMemo(() => getOverallProgress(state), [state])
-  const techniques = useMemo(() => getTechniqueRollups(state), [state])
-  const seedGroups = useMemo(() => getSeedGroupRollups(state), [state])
-  const atomicGroups = useMemo(() => getAtomicGroupRollups(state), [state])
   const seedObjectives = useMemo(
     () => new Map(state.plan?.seed_groups.map((seed) => [seed.id, seed.objective]) ?? []),
     [state.plan],
   )
-  const atomicGroupNames = useMemo(
-    () => new Map(atomicGroups.map((group) => [group.id, group.displayGroup])),
-    [atomicGroups],
+  const plannedAtomicGroups = useMemo(
+    () => new Map(state.plan?.atomic_groups.map((group) => [group.id, group]) ?? []),
+    [state.plan],
   )
-
-  useEffect(() => {
-    if (!state.run || isTerminalRunState(state.run.status)) {
-      return
+  const selectedAttempt = useMemo(
+    () => state.results.find((attempt) => attempt.attack_result_id === attackResultId) ?? null,
+    [attackResultId, state.results],
+  )
+  const selectedAttemptGroup = selectedAttempt
+    ? plannedAtomicGroups.get(selectedAttempt.atomic_group_id)
+    : undefined
+  // Attempts are grouped by atomic group id, then truncated per group, so expanding an
+  // older group still shows its own executions rather than an empty table.
+  const attemptsByGroupId = useMemo(() => {
+    const groupedAttempts = new Map<string, ScenarioProgressResult[]>()
+    for (let index = state.results.length - 1; index >= 0; index -= 1) {
+      const attempt = state.results[index]
+      const existing = groupedAttempts.get(attempt.atomic_group_id)
+      if (existing) {
+        existing.push(attempt)
+      } else {
+        groupedAttempts.set(attempt.atomic_group_id, [attempt])
+      }
     }
-    const timer = setInterval(() => setNowMilliseconds(Date.now()), CLOCK_REFRESH_INTERVAL_MS)
-    return () => clearInterval(timer)
-  }, [state.run])
+    return groupedAttempts
+  }, [state.results])
 
   const closeAttemptDetails = (): void => {
-    setSelectedAttempt(null)
+    navigate(scenarioRunRoutePath(scenarioResultId), { replace: true })
     requestAnimationFrame(() => detailsTriggerRef.current?.focus())
   }
 
   const openAttemptDetails = (
     attempt: ScenarioProgressResult,
-    trigger: HTMLButtonElement,
+    trigger: HTMLElement,
   ): void => {
     detailsTriggerRef.current = trigger
-    setSelectedAttempt(attempt)
+    navigate(scenarioRunAttackRoutePath(scenarioResultId, attempt.attack_result_id))
+  }
+
+  const toggleDisplayGroup = (groupId: string): void => {
+    setExpandedGroupIds((current) => {
+      const updated = new Set(current)
+      if (updated.has(groupId)) {
+        updated.delete(groupId)
+      } else {
+        updated.add(groupId)
+      }
+      return updated
+    })
   }
 
   const handleCancel = async (): Promise<void> => {
@@ -207,14 +244,21 @@ function ScenarioRunPageContent({ scenarioResultId }: ScenarioRunPageContentProp
     )
   }
 
-  if (!state.run) {
+  if (!state.run || !state.summary) {
     return null
   }
 
   const run = state.run
+  const {
+    overall,
+    objective_scorer: objectiveScorer,
+    display_groups: summarizedDisplayGroups,
+    techniques,
+    seed_groups: seedGroups,
+  } = state.summary
+  const displayGroups = summarizedDisplayGroups ?? techniques
+  const unattributedAttempts = state.summary.unattributed_attempts ?? 0
   const canCancel = run.status === 'CREATED' || run.status === 'IN_PROGRESS'
-  const elapsed = getElapsedMilliseconds(run, nowMilliseconds)
-  const eta = getEtaMilliseconds(state, nowMilliseconds)
   const progressText = overall.planned === null
     ? `${overall.completed} known completed units; planned total unavailable`
     : `${overall.completed} of ${overall.planned} executable units completed`
@@ -296,7 +340,7 @@ function ScenarioRunPageContent({ scenarioResultId }: ScenarioRunPageContentProp
         {run.status === 'FAILED' && (
           <MessageBar intent="error">
             <MessageBarBody>
-              This run ended before all planned executable units completed. Persisted attempts remain available below.
+              This run ended before all planned executable units completed. Finished executions remain available below.
             </MessageBarBody>
           </MessageBar>
         )}
@@ -304,7 +348,15 @@ function ScenarioRunPageContent({ scenarioResultId }: ScenarioRunPageContentProp
         {!state.planComplete && (
           <MessageBar intent="info">
             <MessageBarBody>
-              This legacy run has no complete persisted execution plan. Known groups and attempts are shown, but planned totals and ETA are unavailable.
+              This legacy run has no complete persisted execution plan. Known groups and executions are shown, but planned totals and ETA are unavailable.
+            </MessageBarBody>
+          </MessageBar>
+        )}
+
+        {unattributedAttempts > 0 && (
+          <MessageBar intent="warning">
+            <MessageBarBody>
+              {unattributedAttempts} execution{unattributedAttempts === 1 ? '' : 's'} could not be matched to a planned unit, so the totals below understate what ran.
             </MessageBarBody>
           </MessageBar>
         )}
@@ -320,11 +372,15 @@ function ScenarioRunPageContent({ scenarioResultId }: ScenarioRunPageContentProp
             <div className={styles.progressPrimary}>
               <div className={styles.progressText}>
                 <Text weight="semibold">{progressText}</Text>
-                {overall.percent !== null && <Text weight="semibold">{overall.percent}%</Text>}
+                {overall.planned !== null && (
+                  <Text weight="semibold">
+                    {overall.planned > 0 ? `${Math.round((overall.completed / overall.planned) * 100)}%` : '0%'}
+                  </Text>
+                )}
               </div>
-              {overall.percent !== null ? (
+              {overall.planned !== null ? (
                 <ProgressBar
-                  value={overall.percent / 100}
+                  value={overall.planned > 0 ? overall.completed / overall.planned : 0}
                   aria-label="Overall scenario run progress"
                   aria-valuetext={progressText}
                 />
@@ -332,48 +388,123 @@ function ScenarioRunPageContent({ scenarioResultId }: ScenarioRunPageContentProp
                 <Text className={styles.sectionHint}>Progress percentage unavailable</Text>
               )}
             </div>
-            <div className={styles.metric}>
-              <Text size={200} className={styles.metricLabel}>Elapsed</Text>
-              <Text size={500} weight="semibold" className={styles.metricValue}>
-                {formatDuration(elapsed)}
-              </Text>
-            </div>
-            <div className={styles.metric}>
-              <Text size={200} className={styles.metricLabel}>Estimated remaining</Text>
-              <Text size={500} weight="semibold" className={styles.metricValue}>
-                {eta === null ? 'Unavailable' : formatDuration(eta)}
-              </Text>
-            </div>
+            <RunTiming run={run} overall={overall} />
           </div>
           <span className={styles.liveStatus} aria-live="polite">
             {isTerminalRunState(run.status) ? `Run ${formatRunState(run.status)}` : ''}
           </span>
         </section>
 
-        <section className={styles.section} aria-labelledby="technique-summary-heading">
+        <section className={styles.section} aria-labelledby="atomic-groups-heading">
           <div className={styles.sectionHeading}>
-            <Text as="h2" id="technique-summary-heading" size={500} weight="semibold">
-              Technique summary
+            <Text as="h2" id="atomic-groups-heading" size={500} weight="semibold">
+              Atomic attack groups
             </Text>
-            <Text className={styles.sectionHint}>Success is measured over evaluated non-error units.</Text>
+            <Text className={styles.sectionHint}>
+              {`${state.results.length} executions`}
+            </Text>
           </div>
+          {displayGroups.length === 0 ? (
+            <EmptyState text="No atomic attack groups have been persisted yet." />
+          ) : (
+            <div className={styles.displayGroupList}>
+              {displayGroups.map((group) => {
+                const attempts = (group.atomic_group_ids ?? [])
+                  .flatMap((atomicGroupId) => attemptsByGroupId.get(atomicGroupId) ?? [])
+                const expanded = expandedGroupIds.has(group.id)
+                const panelId = `atomic-group-${group.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+                return (
+                  <article key={group.id} className={styles.displayGroup}>
+                    <div className={styles.displayGroupSummary}>
+                      <Button
+                        appearance="subtle"
+                        className={styles.expandButton}
+                        icon={expanded ? <ChevronDownRegular /> : <ChevronRightRegular />}
+                        aria-expanded={expanded}
+                        aria-controls={panelId}
+                        aria-label={`${expanded ? 'Collapse' : 'Expand'} attacks in ${group.display_group}`}
+                        onClick={() => toggleDisplayGroup(group.id)}
+                      />
+                      <span className={styles.displayGroupIdentity}>
+                        <Text size={400} weight="semibold">{group.display_group}</Text>
+                        <Text size={200} className={styles.sectionHint}>
+                          {group.atomic_attack_names.join(', ')}
+                        </Text>
+                      </span>
+                      <span className={styles.displayGroupMetrics}>
+                        <DisplayGroupMetric
+                          label="Completed"
+                          value={formatCompletion(group.completed, group.planned)}
+                        />
+                        <DisplayGroupMetric
+                          label="Attack success"
+                          value={formatSuccess(group.succeeded, group.completed, group.success_percentage)}
+                        />
+                        <DisplayGroupMetric label="Errors" value={String(group.errors)} />
+                        <DisplayGroupMetric label="Retries" value={String(group.retries)} />
+                      </span>
+                    </div>
+                    {expanded && (
+                      <div
+                        id={panelId}
+                        className={styles.displayGroupPanel}
+                        aria-label={`${group.display_group} attack executions`}
+                      >
+                        <AttackExecutionTable
+                          attempts={attempts.slice(0, MAX_VISIBLE_ATTEMPTS_PER_GROUP)}
+                          totalAttempts={attempts.length}
+                          seedObjectives={seedObjectives}
+                          onOpenDetails={openAttemptDetails}
+                        />
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className={styles.section} aria-labelledby="objective-scorer-heading">
+          <Text as="h2" id="objective-scorer-heading" size={500} weight="semibold">
+            Objective Scorer
+          </Text>
+          {!objectiveScorer ? (
+            <EmptyState text="Objective scorer information is unavailable for this run." />
+          ) : (
+            <ObjectiveScorerDetails scorer={objectiveScorer} />
+          )}
+        </section>
+
+        <section className={styles.section} aria-labelledby="techniques-heading">
+          <Text as="h2" id="techniques-heading" size={500} weight="semibold">Techniques</Text>
           {techniques.length === 0 ? (
-            <EmptyState text="Technique results will appear when the first attack attempt is persisted." />
+            <EmptyState text="Technique results will appear when the first attack is persisted." />
           ) : (
             <div className={styles.summaryGrid}>
               {techniques.map((technique) => (
                 <article key={technique.id} className={styles.summaryItem}>
                   <div className={styles.summaryTitle}>
-                    <Text as="h3" size={400} weight="semibold">{technique.displayGroup}</Text>
-                    <Text weight="semibold">{formatSuccess(technique.succeeded, technique.evaluated, technique.successPercent)}</Text>
+                    <Button
+                      appearance="transparent"
+                      className={styles.detailLinkButton}
+                      onClick={() => setSelectedTechnique(technique)}
+                    >
+                      {technique.display_group}
+                    </Button>
+                    <Metric
+                      label="Attack success"
+                      value={formatSuccess(
+                        technique.succeeded,
+                        technique.completed,
+                        technique.success_percentage,
+                      )}
+                    />
                   </div>
-                  <Text size={200} className={styles.sectionHint}>
-                    {technique.atomicAttackNames.join(', ')}
-                  </Text>
                   <div className={styles.summaryStats}>
                     <Metric
                       label="Progress"
-                      value={formatCompletion(technique.completed, technique.planned, state.planComplete)}
+                      value={formatCompletion(technique.completed, technique.planned)}
                     />
                     <Metric label="Errors" value={String(technique.errors)} />
                     <Metric label="Retries" value={String(technique.retries)} />
@@ -384,185 +515,44 @@ function ScenarioRunPageContent({ scenarioResultId }: ScenarioRunPageContentProp
           )}
         </section>
 
-        <section className={styles.section} aria-labelledby="atomic-groups-heading">
-          <div className={styles.sectionHeading}>
-            <Text as="h2" id="atomic-groups-heading" size={500} weight="semibold">
-              Atomic attack groups
-            </Text>
-            <Text className={styles.sectionHint}>Running groups are listed first.</Text>
-          </div>
-          {atomicGroups.length === 0 ? (
-            <EmptyState text="No atomic attack groups have been persisted yet." />
-          ) : (
-            <div className={styles.tableScroll}>
-              <Table size="small" className={styles.table} aria-label="Atomic attack groups">
-                <TableHeader>
-                  <TableRow>
-                    <TableHeaderCell>Status</TableHeaderCell>
-                    <TableHeaderCell>Display group</TableHeaderCell>
-                    <TableHeaderCell>Attack</TableHeaderCell>
-                    <TableHeaderCell>Completed</TableHeaderCell>
-                    <TableHeaderCell>Success</TableHeaderCell>
-                    <TableHeaderCell>Errors</TableHeaderCell>
-                    <TableHeaderCell>Retries</TableHeaderCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {atomicGroups.map((group) => (
-                    <TableRow key={group.id}>
-                      <TableCell><AtomicStatusBadge status={group.status} /></TableCell>
-                      <TableCell>{group.displayGroup}</TableCell>
-                      <TableCell>{group.atomicAttackName || 'Persisted attack'}</TableCell>
-                      <TableCell className={styles.nowrap}>
-                        {formatCompletion(group.completed, group.planned, state.planComplete)}
-                      </TableCell>
-                      <TableCell className={styles.nowrap}>
-                        {formatSuccess(group.succeeded, group.evaluated, group.successPercent)}
-                      </TableCell>
-                      <TableCell>{group.errors}</TableCell>
-                      <TableCell>{group.retries}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </section>
-
-        <section className={styles.section} aria-labelledby="seed-groups-heading">
-          <div className={styles.sectionHeading}>
-            <Text as="h2" id="seed-groups-heading" size={500} weight="semibold">
-              Logical seed groups
-            </Text>
+        <section className={styles.section} aria-labelledby="objectives-heading">
+          <div className={styles.objectivesHeading}>
+            <Text as="h2" id="objectives-heading" size={500} weight="semibold">Objectives</Text>
             <Text className={styles.sectionHint}>Aggregated across techniques.</Text>
           </div>
           {seedGroups.length === 0 ? (
-            <EmptyState text="No logical seed groups have been persisted yet." />
+            <EmptyState text="No objectives have been persisted yet." />
           ) : (
             <div className={styles.tableScroll}>
-              <Table size="small" className={styles.table} aria-label="Logical seed groups">
-                <TableHeader>
+              <Table size="small" aria-label="Objectives">
+                <TableHeader className={styles.highlightedTableHeader}>
                   <TableRow>
                     <TableHeaderCell>Objective</TableHeaderCell>
-                    <TableHeaderCell>Completed</TableHeaderCell>
-                    <TableHeaderCell>Success</TableHeaderCell>
-                    <TableHeaderCell>Errors</TableHeaderCell>
-                    <TableHeaderCell>Retries</TableHeaderCell>
+                    <TableHeaderCell className={styles.objectiveSuccessColumn}>Attack Success</TableHeaderCell>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {seedGroups.map((seed) => (
-                    <TableRow key={seed.id}>
-                      <TableCell>
-                        <Text className={styles.preview}>{objectivePreview(seed.objective, seed.id)}</Text>
-                      </TableCell>
-                      <TableCell className={styles.nowrap}>
-                        {formatCompletion(seed.completed, seed.planned, state.planComplete)}
-                      </TableCell>
-                      <TableCell className={styles.nowrap}>
-                        {formatSuccess(seed.succeeded, seed.evaluated, seed.successPercent)}
-                      </TableCell>
-                      <TableCell>{seed.errors}</TableCell>
-                      <TableCell>{seed.retries}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </section>
-
-        <section className={styles.section} aria-labelledby="attempts-heading">
-          <div className={styles.sectionHeading}>
-            <Text as="h2" id="attempts-heading" size={500} weight="semibold">
-              Persisted attack attempts
-            </Text>
-            <Text className={styles.sectionHint}>{state.results.length} attempts</Text>
-          </div>
-          {state.results.length === 0 ? (
-            <EmptyState text="This run has not persisted an attack attempt yet." />
-          ) : (
-            <div className={styles.tableScroll}>
-              <Table size="small" className={styles.attemptsTable} aria-label="Persisted attack attempts">
-                <TableHeader>
-                  <TableRow>
-                    <TableHeaderCell>Attack</TableHeaderCell>
-                    <TableHeaderCell>Outcome</TableHeaderCell>
-                    <TableHeaderCell>Group</TableHeaderCell>
-                    <TableHeaderCell>Seed</TableHeaderCell>
-                    <TableHeaderCell>Objective</TableHeaderCell>
-                    <TableHeaderCell>Execution</TableHeaderCell>
-                    <TableHeaderCell>Retries / error</TableHeaderCell>
-                    <TableHeaderCell>Timestamp</TableHeaderCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[...state.results].reverse().map((attempt) => {
-                    const attackDestination = attackRoutePath(
-                      attempt.attack_result_id,
-                      scenarioResultId,
-                    )
+                  {seedGroups.map((seed) => {
+                    const planSeed = state.plan?.seed_groups.find((candidate) => candidate.id === seed.id)
                     return (
-                      <TableRow
-                        key={attempt.attack_result_id}
-                        className={styles.clickableAttemptRow}
-                        tabIndex={0}
-                        aria-label={`Open attack ${attempt.attack_result_id}`}
-                        onClick={(event) => {
-                          if (!shouldIgnoreAttemptRowClick(event)) {
-                            navigate(attackDestination)
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (
-                            (event.key === 'Enter' || event.key === ' ')
-                            && !hasActivationModifier(event)
-                            && !isInteractiveTarget(event.target)
-                          ) {
-                            event.preventDefault()
-                            navigate(attackDestination)
-                          }
-                        }}
-                      >
-                        <TableCell>
-                          <Link
-                            className={styles.attackLink}
-                            to={attackDestination}
-                            aria-label={`Open attack ${attempt.attack_result_id}`}
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <Text className={styles.preview} title={attempt.attack_result_id}>
-                              {attempt.attack_result_id}
-                            </Text>
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <Badge appearance="tint" color={OUTCOME_BADGE_COLORS[attempt.outcome]}>
-                            {formatOutcome(attempt.outcome)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{atomicGroupNames.get(attempt.atomic_group_id) ?? attempt.atomic_attack_name}</TableCell>
-                        <TableCell><Text className={styles.preview}>{attempt.seed_group_id}</Text></TableCell>
+                      <TableRow key={seed.id}>
                         <TableCell>
                           <Button
-                            appearance="subtle"
-                            className={styles.objectiveButton}
-                            icon={<EyeRegular />}
-                            aria-label={`View details for attack attempt ${attempt.attack_result_id}`}
-                            onClick={(event) => openAttemptDetails(attempt, event.currentTarget)}
+                            appearance="transparent"
+                            className={styles.objectiveLinkButton}
+                            onClick={() => setSelectedObjective(planSeed ?? {
+                              id: seed.id,
+                              objective_sha256: '',
+                              objective: seed.objective ?? 'Objective text unavailable.',
+                              prompts: [],
+                            })}
                           >
-                            <Text className={styles.preview}>
-                              {objectivePreview(seedObjectives.get(attempt.seed_group_id) ?? null, attempt.seed_group_id)}
-                            </Text>
+                            {objectivePreview(seed.objective ?? null, seed.id)}
                           </Button>
                         </TableCell>
-                        <TableCell className={styles.nowrap}>{formatDuration(attempt.execution_time_ms)}</TableCell>
-                        <TableCell>
-                          {attempt.outcome === 'error'
-                            ? attempt.error_message ?? attempt.error_type ?? 'Error'
-                            : `${attempt.total_retries} retries`}
+                        <TableCell className={styles.objectiveSuccessColumn}>
+                          {formatSuccess(seed.succeeded, seed.completed, seed.success_percentage)}
                         </TableCell>
-                        <TableCell className={styles.nowrap}>{formatTimestamp(attempt.timestamp)}</TableCell>
                       </TableRow>
                     )
                   })}
@@ -586,7 +576,7 @@ function ScenarioRunPageContent({ scenarioResultId }: ScenarioRunPageContentProp
             <DialogTitle>Cancel this scenario run?</DialogTitle>
             <DialogContent className={styles.dialogContent}>
               <Text>
-                In-flight work will be stopped. Attempts already persisted will remain available in this dashboard.
+                In-flight work will be stopped. Finished executions will remain available in this dashboard.
               </Text>
               {cancelError && (
                 <MessageBar intent="error">
@@ -617,35 +607,22 @@ function ScenarioRunPageContent({ scenarioResultId }: ScenarioRunPageContentProp
           }
         }}
       >
-        <DialogSurface>
-          <DialogBody>
-            <DialogTitle>Attack attempt details</DialogTitle>
+        <DialogSurface className={styles.attackDetailDialogSurface}>
+          <DialogBody className={styles.attackDetailDialogBody}>
+            <DialogTitle>{selectedAttempt?.atomic_attack_name || 'Attack attempt'}</DialogTitle>
             {selectedAttempt && (
-              <DialogContent className={styles.dialogContent}>
-                <div>
-                  <Text size={200} className={styles.metadataLabel}>Objective</Text>
-                  <Text as="p" className={styles.objective}>
-                    {seedObjectives.get(selectedAttempt.seed_group_id) ?? 'Objective text unavailable for this legacy attempt.'}
-                  </Text>
-                </div>
-                <div className={styles.detailGrid}>
-                  <Metric label="Attack result ID" value={selectedAttempt.attack_result_id} />
-                  <Metric label="Outcome" value={formatOutcome(selectedAttempt.outcome)} />
-                  <Metric label="Display group" value={atomicGroupNames.get(selectedAttempt.atomic_group_id) ?? selectedAttempt.atomic_attack_name} />
-                  <Metric label="Atomic attack" value={selectedAttempt.atomic_attack_name || 'Persisted attack'} />
-                  <Metric label="Logical seed group" value={selectedAttempt.seed_group_id} />
-                  <Metric label="Execution time" value={formatDuration(selectedAttempt.execution_time_ms)} />
-                  <Metric label="Retries" value={String(selectedAttempt.total_retries)} />
-                  <Metric label="Timestamp" value={formatTimestamp(selectedAttempt.timestamp)} />
-                </div>
-                {selectedAttempt.outcome === 'error' && (
-                  <MessageBar intent="error">
-                    <MessageBarBody>
-                      {selectedAttempt.error_type ? `${selectedAttempt.error_type}: ` : ''}
-                      {selectedAttempt.error_message ?? 'No error detail was persisted.'}
-                    </MessageBarBody>
-                  </MessageBar>
-                )}
+              <DialogContent className={styles.attackDetailDialogContent}>
+                <AttackAttemptDetails
+                  attempt={selectedAttempt}
+                  objective={seedObjectives.get(selectedAttempt.seed_group_id) ?? null}
+                  atomicGroup={selectedAttemptGroup}
+                  objectiveScorer={objectiveScorer}
+                  conversationPath={attackConversationRoutePath(
+                    selectedAttempt.attack_result_id,
+                    selectedAttempt.conversation_id,
+                    scenarioResultId,
+                  )}
+                />
               </DialogContent>
             )}
             <DialogActions>
@@ -654,6 +631,9 @@ function ScenarioRunPageContent({ scenarioResultId }: ScenarioRunPageContentProp
           </DialogBody>
         </DialogSurface>
       </Dialog>
+
+      <TechniqueDetailsDialog technique={selectedTechnique} onClose={() => setSelectedTechnique(null)} />
+      <ObjectiveDetailsDialog objective={selectedObjective} onClose={() => setSelectedObjective(null)} />
     </main>
   )
 }
@@ -663,13 +643,54 @@ interface MetricProps {
   readonly value: string
 }
 
+function DisplayGroupMetric({ label, value }: MetricProps) {
+  const styles = useScenarioRunPageStyles()
+  return (
+    <span className={styles.displayGroupMetric}>
+      <Text size={200} className={styles.metricLabel}>{label}</Text>
+      <Text weight="semibold" className={styles.metricValue}>{value}</Text>
+    </span>
+  )
+}
+
 function Metric({ label, value }: MetricProps) {
   const styles = useScenarioRunPageStyles()
   return (
-    <div className={styles.metric}>
+    <div className={styles.metric} role="group" aria-label={label}>
       <Text size={200} className={styles.metricLabel}>{label}</Text>
       <Text weight="semibold" className={styles.metricValue}>{value}</Text>
     </div>
+  )
+}
+
+interface RunTimingProps {
+  readonly run: ScenarioProgressHeader
+  readonly overall: ScenarioProgressCounts
+}
+
+function RunTiming({ run, overall }: RunTimingProps) {
+  const [nowMilliseconds, setNowMilliseconds] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (isTerminalRunState(run.status)) {
+      return
+    }
+    const timer = setInterval(() => setNowMilliseconds(Date.now()), CLOCK_REFRESH_INTERVAL_MS)
+    return () => clearInterval(timer)
+  }, [run.status])
+
+  const elapsed = getElapsedMilliseconds(run, nowMilliseconds)
+  const eta = getEtaMilliseconds(run, overall, nowMilliseconds)
+  const estimatedRemaining = isTerminalRunState(run.status)
+    ? 'Completed'
+    : eta === null
+      ? 'Unavailable'
+      : formatDuration(eta)
+  return (
+    <>
+      <Metric label="Elapsed" value={formatDuration(elapsed)} />
+      <Metric label="Estimated remaining" value={estimatedRemaining} />
+    </>
   )
 }
 
@@ -686,27 +707,8 @@ function EmptyState({ text }: EmptyStateProps) {
   )
 }
 
-interface AtomicStatusBadgeProps {
-  readonly status: 'Running' | 'Pending' | 'Incomplete' | 'Completed'
-}
-
-function AtomicStatusBadge({ status }: AtomicStatusBadgeProps) {
-  const color = status === 'Running'
-    ? 'brand'
-    : status === 'Completed'
-      ? 'success'
-      : status === 'Incomplete'
-        ? 'warning'
-        : 'informative'
-  return <Badge appearance="tint" color={color}>{status}</Badge>
-}
-
-function formatRunState(status: ScenarioRunState): string {
+function formatRunState(status: string): string {
   return status.toLowerCase().replace('_', ' ').replace(/^\w/, (letter) => letter.toUpperCase())
-}
-
-function formatOutcome(outcome: ScenarioProgressResult['outcome']): string {
-  return outcome.replace(/^\w/, (letter) => letter.toUpperCase())
 }
 
 function statusIcon(status: ScenarioRunState): React.ReactElement {
@@ -722,69 +724,10 @@ function statusIcon(status: ScenarioRunState): React.ReactElement {
   return <ArrowSyncRegular />
 }
 
-function formatTimestamp(timestamp: string): string {
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) {
-    return 'Unavailable'
-  }
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-}
-
-function formatDuration(milliseconds: number): string {
-  if (!Number.isFinite(milliseconds) || milliseconds < 0) {
-    return 'Unavailable'
-  }
-  const totalSeconds = Math.floor(milliseconds / 1_000)
-  const hours = Math.floor(totalSeconds / 3_600)
-  const minutes = Math.floor((totalSeconds % 3_600) / 60)
-  const seconds = totalSeconds % 60
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`
-  }
-  return `${seconds}s`
-}
-
 function formatSuccess(succeeded: number, evaluated: number, percent: number | null): string {
   return percent === null ? `${succeeded}/${evaluated} —` : `${succeeded}/${evaluated} (${percent}%)`
 }
 
-function formatCompletion(completed: number, planned: number, planComplete: boolean): string {
-  return planComplete ? `${completed}/${planned}` : `${completed}/total unavailable`
-}
-
-function objectivePreview(objective: string | null, fallbackId: string): string {
-  if (!objective) {
-    return `Objective unavailable (${fallbackId})`
-  }
-  if (objective.length <= OBJECTIVE_PREVIEW_LENGTH) {
-    return objective
-  }
-  return `${objective.slice(0, OBJECTIVE_PREVIEW_LENGTH - 1)}…`
-}
-
-function shouldIgnoreAttemptRowClick(event: React.MouseEvent<HTMLTableRowElement>): boolean {
-  return event.button !== 0
-    || hasActivationModifier(event)
-    || isInteractiveTarget(event.target)
-}
-
-function hasActivationModifier(
-  event: Pick<React.MouseEvent, 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>
-    | Pick<React.KeyboardEvent, 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>,
-): boolean {
-  return event.altKey || event.ctrlKey || event.metaKey || event.shiftKey
-}
-
-function isInteractiveTarget(target: EventTarget): boolean {
-  return target instanceof Element && target.closest(INTERACTIVE_ELEMENT_SELECTOR) !== null
+function formatCompletion(completed: number, planned: number | null): string {
+  return planned === null ? `${completed}/total unavailable` : `${completed}/${planned}`
 }

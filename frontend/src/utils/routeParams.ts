@@ -47,7 +47,12 @@ export function attackConversationRoutePath(
 
 /** Builds the route for one scenario run. Callers must pass a trusted persisted ID. */
 export function scenarioRunRoutePath(scenarioResultId: string): string {
-  return `/scenario-history/${encodeURIComponent(scenarioResultId)}`
+  return `/scanner-history/${encodeURIComponent(scenarioResultId)}`
+}
+
+/** Builds the route for one attack result within a scenario run. */
+export function scenarioRunAttackRoutePath(scenarioResultId: string, attackResultId: string): string {
+  return `${scenarioRunRoutePath(scenarioResultId)}/${encodeURIComponent(attackResultId)}`
 }
 
 function appendScenarioRunProvenance(path: string, scenarioResultId?: string | null): string {

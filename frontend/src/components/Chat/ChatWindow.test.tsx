@@ -335,7 +335,7 @@ describe("ChatWindow Integration", () => {
     expect(screen.getByRole("navigation", { name: "Attack provenance" })).toBeInTheDocument();
     expect(screen.getByRole("link", {
       name: `Return to scenario run ${scenarioResultId}`,
-    })).toHaveAttribute("href", `/scenario-history/${scenarioResultId}`);
+    })).toHaveAttribute("href", `/scanner-history/${scenarioResultId}`);
 
     rerender(
       <TestWrapper>
@@ -357,7 +357,7 @@ describe("ChatWindow Integration", () => {
               element={<ChatWindow {...defaultProps} scenarioResultId={scenarioResultId} />}
             />
             <Route
-              path="/scenario-history/:scenarioResultId"
+              path="/scanner-history/:scenarioResultId"
               element={<h1>Originating scenario run</h1>}
             />
           </Routes>

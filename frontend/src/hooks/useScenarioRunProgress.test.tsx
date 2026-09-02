@@ -23,6 +23,7 @@ const mockGetRunProgress = scenariosApi.getRunProgress as jest.Mock
 function makeResult(id: string): ScenarioProgressResult {
   return {
     attack_result_id: id,
+    conversation_id: 'conversation-1',
     atomic_group_id: 'group-1',
     atomic_attack_name: 'attack-1',
     seed_group_id: 'seed-1',
@@ -50,9 +51,21 @@ function makePage(overrides: Partial<ScenarioRunProgress> = {}): ScenarioRunProg
       atomic_groups: [],
       seed_groups: [],
     },
-    reset: false,
-    active_atomic_group_ids: [],
     results: [],
+    summary: {
+      overall: {
+        completed: 0,
+        planned: 0,
+        succeeded: 0,
+        success_percentage: null,
+        errors: 0,
+        retries: 0,
+      },
+      objective_scorer: null,
+      techniques: [],
+      seed_groups: [],
+      atomic_groups: [],
+    },
     next_cursor: null,
     has_more: false,
     plan_complete: true,
@@ -185,21 +198,21 @@ describe('useScenarioRunProgress', () => {
     unmount()
   })
 
-  it('transitions a queued run to active progress on a later poll', async () => {
+  it('transitions a created run to active progress on a later poll', async () => {
     jest.useFakeTimers()
     mockGetRunProgress
       .mockResolvedValueOnce(makePage({
-        run: { ...makePage().run, status: 'QUEUED', queue_position: 1 },
+        run: { ...makePage().run, status: 'CREATED' },
         next_cursor: 'cursor-1',
       }))
       .mockResolvedValueOnce(makePage({
-        run: { ...makePage().run, status: 'IN_PROGRESS', queue_position: null },
+        run: { ...makePage().run, status: 'IN_PROGRESS' },
         plan: null,
         next_cursor: 'cursor-1',
       }))
 
     const { result, unmount } = renderHook(() => useScenarioRunProgress('run-1'))
-    await waitFor(() => expect(result.current.state.run?.status).toBe('QUEUED'))
+    await waitFor(() => expect(result.current.state.run?.status).toBe('CREATED'))
     await act(async () => {
       await jest.advanceTimersByTimeAsync(SCENARIO_RUN_POLL_INTERVAL_MS)
     })
@@ -353,7 +366,7 @@ describe('useScenarioRunProgress', () => {
     unmount()
   })
 
-  it('retries from the last good cursor after a transient failure', async () => {
+  it('auto-retries once from the last good cursor before pausing live updates', async () => {
     jest.useFakeTimers()
     mockGetRunProgress
       .mockResolvedValueOnce(makePage({ next_cursor: 'cursor-1' }))
@@ -365,13 +378,43 @@ describe('useScenarioRunProgress', () => {
     await act(async () => {
       await jest.advanceTimersByTimeAsync(SCENARIO_RUN_POLL_INTERVAL_MS)
     })
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(SCENARIO_RUN_POLL_INTERVAL_MS)
+    })
+
+    expect(mockGetRunProgress).toHaveBeenNthCalledWith(
+      3,
+      'run-1',
+      { since: 'cursor-1', limit: 500 },
+      expect.any(AbortSignal),
+    )
+    expect(result.current.state.stale).toBe(false)
+    unmount()
+  })
+
+  it('pauses live updates when the automatic retry also fails', async () => {
+    jest.useFakeTimers()
+    mockGetRunProgress
+      .mockResolvedValueOnce(makePage({ next_cursor: 'cursor-1' }))
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockRejectedValueOnce(new Error('still failing'))
+      .mockResolvedValueOnce(makePage({ plan: null, next_cursor: 'cursor-2' }))
+
+    const { result, unmount } = renderHook(() => useScenarioRunProgress('run-1'))
+    await act(async () => Promise.resolve())
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(SCENARIO_RUN_POLL_INTERVAL_MS)
+    })
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(SCENARIO_RUN_POLL_INTERVAL_MS)
+    })
     expect(result.current.state.stale).toBe(true)
 
     act(() => result.current.retry())
     await act(async () => Promise.resolve())
 
     expect(mockGetRunProgress).toHaveBeenNthCalledWith(
-      3,
+      4,
       'run-1',
       { since: 'cursor-1', limit: 500 },
       expect.any(AbortSignal),
@@ -417,7 +460,7 @@ describe('useScenarioRunProgress', () => {
   it('applies a nonterminal run summary without forcing a catch-up request', async () => {
     mockGetRunProgress.mockResolvedValueOnce(makePage({ next_cursor: 'cursor-1' }))
     const { result, unmount } = renderHook(() => useScenarioRunProgress('run-1'))
-    await waitFor(() => expect(result.current.state.cursor).toBe('cursor-1'))
+    await waitFor(() => expect(mockGetRunProgress).toHaveBeenCalledTimes(1))
     mockGetRunProgress.mockClear()
 
     act(() => {

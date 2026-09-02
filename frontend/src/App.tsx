@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation, useSearchParams, matchPath } from 'react-router'
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams, matchPath } from 'react-router'
 import { useMsal } from '@azure/msal-react'
 import { Joyride } from 'react-joyride'
 import { useTheme } from './hooks/useTheme'
@@ -36,7 +36,9 @@ import { useTour } from './hooks/useTour'
 import {
   attackConversationRoutePath,
   attackRoutePath,
+  routerPathParamValue,
   scenarioRunProvenance,
+  scenarioRunRoutePath,
 } from './utils/routeParams'
 
 const AUTO_DISMISS_MS = 5_000
@@ -54,17 +56,27 @@ const VIEW_PATHS: Record<ViewName, string> = {
 /**
  * Resolves the active view from a URL path, defaulting to home for unknown
  * paths. Scanner routes are prefix-matched (`/scanner/...` and
- * `/scenario-history/...`) since they carry a path parameter rather than a
+ * `/scanner-history/...`) since they carry a path parameter rather than a
  * single canonical `VIEW_PATHS` entry.
  */
 function viewFromPath(pathname: string): ViewName {
-  if (pathname === VIEW_PATHS.scenarios || pathname.startsWith(`${VIEW_PATHS.scenarios}/`) || pathname.startsWith('/scenario-history/')) {
+  if (
+    pathname === VIEW_PATHS.scenarios
+    || pathname.startsWith(`${VIEW_PATHS.scenarios}/`)
+    || pathname.startsWith('/scanner-history/')
+    || pathname.startsWith('/scenario-history/')
+  ) {
     return 'scenarios'
   }
   const match = (Object.entries(VIEW_PATHS) as [ViewName, string][]).find(
     ([, path]) => path === pathname,
   )
   return match ? match[0] : 'home'
+}
+
+function LegacyScenarioRunRedirect() {
+  const { scenarioResultId } = useParams<{ scenarioResultId: string }>()
+  return <Navigate replace to={scenarioRunRoutePath(routerPathParamValue(scenarioResultId))} />
 }
 
 /** Status of the in-flight attack load for an /attacks/:id route. */
@@ -506,7 +518,9 @@ function App() {
                   />
                 }
               />
-              <Route path="/scenario-history/:scenarioResultId" element={<ScenarioRunPage />} />
+              <Route path="/scanner-history/:scenarioResultId/:attackResultId" element={<ScenarioRunPage />} />
+              <Route path="/scanner-history/:scenarioResultId" element={<ScenarioRunPage />} />
+              <Route path="/scenario-history/:scenarioResultId" element={<LegacyScenarioRunRedirect />} />
               <Route path="/config" element={<Configuration />} />
               <Route
                 path="/history"

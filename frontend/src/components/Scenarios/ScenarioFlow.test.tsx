@@ -110,10 +110,21 @@ const RUN_STATE: ScenarioRunProgressState = {
     seed_groups: [],
   },
   planComplete: true,
-  activeAtomicGroupIds: [],
+  summary: {
+    overall: {
+      completed: 0,
+      planned: 0,
+      succeeded: 0,
+      success_percentage: null,
+      errors: 0,
+      retries: 0,
+    },
+    display_groups: [],
+    techniques: [],
+    seed_groups: [],
+    atomic_groups: [],
+  },
   results: [],
-  cursor: 'cursor-0',
-  hasMore: false,
   error: null,
   stale: false,
 }
@@ -140,7 +151,7 @@ function renderFlow(): void {
               />
             )}
           />
-          <Route path="/scenario-history/:scenarioResultId" element={<ScenarioRunPage />} />
+          <Route path="/scanner-history/:scenarioResultId" element={<ScenarioRunPage />} />
         </Routes>
       </MemoryRouter>
     </FluentProvider>,
@@ -203,7 +214,7 @@ describe('Scenario catalog-to-run integration', () => {
     }))
     expect(await screen.findByTestId('scenario-run-page')).toBeInTheDocument()
     expect(screen.getByLabelText('Current route')).toHaveTextContent(
-      `/scenario-history/${RUN_ID}`,
+      `/scanner-history/${RUN_ID}`,
     )
     expect(screen.getByRole('heading', { level: 1, name: SCENARIO_NAME })).toBeInTheDocument()
   })
