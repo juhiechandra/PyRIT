@@ -568,13 +568,13 @@ class PyRITShell(cmd.Cmd):
         import shlex
 
         from pyrit.cli._cli_args import ScenarioResultView, build_scenario_results_parser
-        from pyrit.cli._output import print_conversations, print_scenario_result_async
+        from pyrit.cli._output import print_attacks_table, print_conversations, print_scenario_result_async
         from pyrit.cli._results import (
             apply_view_limit_policy,
+            build_attacks_table_payload,
             build_conversations_payload_async,
             resolve_view,
         )
-        from pyrit.output import ScenarioResultOutputFormat, output_scenario_attacks_async
 
         try:
             tokens = shlex.split(arg)
@@ -611,15 +611,13 @@ class PyRITShell(cmd.Cmd):
             return
 
         if view in (ScenarioResultView.ATTACKS, ScenarioResultView.FULL):
-            self._run_async(
-                output_scenario_attacks_async(
-                    result=result,
-                    attack_result_ids=parsed.attack_result_ids,
-                    limit=limit,
-                    format=ScenarioResultOutputFormat.PRETTY,
-                    enable_colors=sys.stdout.isatty() and not os.environ.get("NO_COLOR"),
-                )
+            attacks_payload = build_attacks_table_payload(
+                result=result,
+                scenario_result_id=parsed.scenario_result_id,
+                attack_result_ids=parsed.attack_result_ids,
+                limit=limit,
             )
+            print_attacks_table(payload=attacks_payload)
             if view is ScenarioResultView.ATTACKS:
                 return
 

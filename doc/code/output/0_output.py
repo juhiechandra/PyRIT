@@ -303,10 +303,6 @@ await conversation_printer.write_async(conversation)  # type: ignore
 # - **Format** (`pretty.py`, `markdown.py`): implements `render_async`, returns `str` — no data I/O
 # - **Leaf** (`*MemoryPrinter`): implements data methods via `CentralMemory`, forwarding `render_async`
 #
-# Payload-backed views do not need a memory leaf when all required data is already present.
-# For example, scenario attack rows and technique metrics accept an already-fetched
-# `ScenarioResult`, whether it came from `CentralMemory` or the REST API.
-#
 # ### Module Layout
 #
 # ```
@@ -346,8 +342,6 @@ await conversation_printer.write_async(conversation)  # type: ignore
 # |----------|--------|---------|
 # | `output_attack_async` | Attack results | `pretty`, `markdown` |
 # | `output_scenario_async` | Scenario results | `pretty` |
-# | `output_scenario_attacks_async` | Scenario attack rows | `pretty`, `json` |
-# | `output_scenario_technique_metrics_async` | Scenario technique metrics | `pretty`, `json`, `csv` |
 # | `output_scorer_async` | Scorer info/metrics | `pretty` |
 # | `output_conversation_async` | Conversation history | `pretty` |
 # | `output_score_async` | Score list | `pretty` |

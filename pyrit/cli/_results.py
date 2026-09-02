@@ -21,28 +21,41 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from pyrit.cli._cli_args import ScenarioResultView
-from pyrit.output.scenario_result.payloads import (
-    AttackRow as AttackRow,
-)
-from pyrit.output.scenario_result.payloads import (
-    AttacksTablePayload as AttacksTablePayload,
-)
-from pyrit.output.scenario_result.payloads import (
-    build_attacks_table_payload as build_attacks_table_payload,
-)
-from pyrit.output.scenario_result.payloads import (
-    select_scenario_attacks,
-)
 
 if TYPE_CHECKING:
     from pyrit.cli.api_client import PyRITApiClient
-    from pyrit.models import ScenarioResult
+    from pyrit.models import AttackResult, ScenarioResult
 
 #: Default cap on how many attacks the expensive views (``conversations`` /
 #: ``full``) render when the user gives neither ``--attack-result-ids`` nor
 #: ``--limit``. Unlike ``attacks`` (a single embedded read), these views make a
 #: per-attack message fetch, so an unbounded run could pull many transcripts.
 _DEFAULT_HEAVY_VIEW_LIMIT = 5
+
+
+class AttackRow(BaseModel):
+    """A single attack result rendered as one row of the attacks table."""
+
+    attack_result_id: str
+    atomic_attack_name: str
+    objective: str
+    outcome: str
+    executed_turns: int
+    score_value: str | None = None
+
+
+class AttacksTablePayload(BaseModel):
+    """
+    The ``attacks`` view: one row per attack result in a scenario run.
+
+    ``total`` is the number of attacks that matched the selection before
+    ``--limit`` was applied; ``len(rows)`` is how many are actually included.
+    Exposing both lets any renderer show a "showing N of M" note.
+    """
+
+    scenario_result_id: str
+    rows: list[AttackRow] = Field(default_factory=list)
+    total: int = 0
 
 
 class TranscriptScore(BaseModel):
@@ -156,6 +169,50 @@ def apply_view_limit_policy(
     return limit
 
 
+def build_attacks_table_payload(
+    *,
+    result: ScenarioResult,
+    scenario_result_id: str,
+    attack_result_ids: list[str] | None = None,
+    limit: int | None = None,
+) -> AttacksTablePayload:
+    """
+    Build the ``attacks`` payload from an already-fetched scenario result.
+
+    Every ``AttackResult`` is already embedded in *result* (grouped by atomic
+    attack name), so no extra server calls are needed. ``--limit`` is applied
+    here, on the payload, rather than in a renderer, so that all output formats
+    honor it identically.
+
+    Args:
+        result (ScenarioResult): The full scenario result to read attacks from.
+        scenario_result_id (str): The run id, echoed back on the payload.
+        attack_result_ids (list[str] | None): When provided, keep only attacks
+            whose id is in this set. Defaults to None (all attacks).
+        limit (int | None): Maximum number of rows to include. Defaults to None.
+
+    Returns:
+        AttacksTablePayload: The rows plus the pre-limit total.
+    """
+    selected = _select_attacks(result=result, attack_result_ids=attack_result_ids)
+    total = len(selected)
+    if limit is not None:
+        selected = selected[:limit]
+
+    rows = [
+        AttackRow(
+            attack_result_id=attack_result.attack_result_id,
+            atomic_attack_name=atomic_attack_name,
+            objective=attack_result.objective,
+            outcome=attack_result.outcome.value,
+            executed_turns=attack_result.executed_turns,
+            score_value=(str(attack_result.last_score.score_value) if attack_result.last_score is not None else None),
+        )
+        for atomic_attack_name, attack_result in selected
+    ]
+    return AttacksTablePayload(scenario_result_id=scenario_result_id, rows=rows, total=total)
+
+
 async def build_conversations_payload_async(
     *,
     result: ScenarioResult,
@@ -184,7 +241,7 @@ async def build_conversations_payload_async(
     Returns:
         ConversationsPayload: The per-attack transcripts plus the pre-limit total.
     """
-    selected = select_scenario_attacks(result=result, attack_result_ids=attack_result_ids)
+    selected = _select_attacks(result=result, attack_result_ids=attack_result_ids)
     total = len(selected)
     if limit is not None:
         selected = selected[:limit]
@@ -220,6 +277,31 @@ async def build_conversations_payload_async(
         conversations=conversations,
         total=total,
     )
+
+
+def _select_attacks(*, result: ScenarioResult, attack_result_ids: list[str] | None) -> list[tuple[str, AttackResult]]:
+    """
+    Return ``(atomic_attack_name, attack_result)`` pairs, optionally id-filtered.
+
+    Shared by the ``attacks`` and ``conversations`` builders so both select and
+    order attacks identically.
+
+    Args:
+        result (ScenarioResult): The scenario result whose attacks to walk.
+        attack_result_ids (list[str] | None): When provided, keep only attacks
+            whose id is in this set.
+
+    Returns:
+        list[tuple[str, AttackResult]]: The selected pairs in scenario order.
+    """
+    id_filter = set(attack_result_ids) if attack_result_ids else None
+    selected: list[tuple[str, AttackResult]] = []
+    for atomic_attack_name, attack_results in result.attack_results.items():
+        for attack_result in attack_results:
+            if id_filter is not None and attack_result.attack_result_id not in id_filter:
+                continue
+            selected.append((atomic_attack_name, attack_result))
+    return selected
 
 
 def _message_to_transcript(

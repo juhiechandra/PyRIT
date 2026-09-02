@@ -10,31 +10,15 @@ deferred inside each ``*MemoryPrinter`` constructor, so importing this module (o
 """
 
 import os
-from enum import Enum
 
 from pyrit.models import AttackResult, ComponentIdentifier, Message, ScenarioResult, Score
 from pyrit.output.attack_result.markdown import MarkdownAttackResultMemoryPrinter
 from pyrit.output.attack_result.pretty import PrettyAttackResultMemoryPrinter
 from pyrit.output.conversation.pretty import PrettyConversationMemoryPrinter
-from pyrit.output.scenario_result.csv import CsvScenarioTechniqueMetricsPrinter
-from pyrit.output.scenario_result.json import JsonScenarioAttacksPrinter, JsonScenarioTechniqueMetricsPrinter
-from pyrit.output.scenario_result.payloads import build_attacks_table_payload, build_technique_metrics_payload
-from pyrit.output.scenario_result.pretty import (
-    PrettyScenarioAttacksPrinter,
-    PrettyScenarioResultMemoryPrinter,
-    PrettyScenarioTechniqueMetricsPrinter,
-)
+from pyrit.output.scenario_result.pretty import PrettyScenarioResultMemoryPrinter
 from pyrit.output.score.pretty import PrettyScorePrinter
 from pyrit.output.scorer.pretty import PrettyScorerMemoryPrinter
 from pyrit.output.sink import OutputFormat, Sink, StdoutSink, get_default_sink
-
-
-class ScenarioResultOutputFormat(str, Enum):
-    """Supported output formats for reusable scenario result views."""
-
-    PRETTY = "pretty"
-    JSON = "json"
-    CSV = "csv"
 
 
 async def output_attack_async(
@@ -108,7 +92,6 @@ async def output_scenario_async(
     format: OutputFormat = "pretty",  # noqa: A002
     sink: Sink | None = None,
     sort_groups_by_success_rate: bool = False,
-    enable_colors: bool = True,
 ) -> None:
     """
     Print a scenario result in the specified format to the specified destination.
@@ -120,7 +103,6 @@ async def output_scenario_async(
         sort_groups_by_success_rate (bool): When True, the Per-Group Breakdown is sorted so
             that the group with the highest success rate appears first. Defaults to False,
             which preserves the original insertion order.
-        enable_colors (bool): Whether to emit ANSI colors. Defaults to True.
 
     Raises:
         ValueError: If ``format`` is not a supported value.
@@ -131,81 +113,8 @@ async def output_scenario_async(
     printer = PrettyScenarioResultMemoryPrinter(
         sink=sink or get_default_sink(StdoutSink),
         sort_groups_by_success_rate=sort_groups_by_success_rate,
-        enable_colors=enable_colors,
     )
     await printer.write_async(result)
-
-
-async def output_scenario_attacks_async(
-    result: ScenarioResult,
-    *,
-    format: ScenarioResultOutputFormat | str = ScenarioResultOutputFormat.PRETTY,  # noqa: A002
-    sink: Sink | None = None,
-    attack_result_ids: list[str] | None = None,
-    limit: int | None = None,
-    enable_colors: bool = True,
-) -> None:
-    """
-    Render a scenario's attack rows from a memory- or REST-sourced result.
-
-    Args:
-        result (ScenarioResult): The already-fetched scenario result.
-        format (ScenarioResultOutputFormat | str): Output format. Defaults to PRETTY.
-        sink (Sink | None): Output sink. Defaults to StdoutSink.
-        attack_result_ids (list[str] | None): Optional attack result ID filter.
-        limit (int | None): Optional maximum number of rows.
-        enable_colors (bool): Whether pretty output emits ANSI colors. Defaults to True.
-
-    Raises:
-        ValueError: If ``format`` is not supported for attack rows.
-    """
-    resolved_format = ScenarioResultOutputFormat(format)
-    payload = build_attacks_table_payload(
-        result=result,
-        scenario_result_id=str(result.id),
-        attack_result_ids=attack_result_ids,
-        limit=limit,
-    )
-    if resolved_format is ScenarioResultOutputFormat.PRETTY:
-        printer = PrettyScenarioAttacksPrinter(
-            sink=sink or get_default_sink(StdoutSink),
-            enable_colors=enable_colors,
-        )
-    elif resolved_format is ScenarioResultOutputFormat.JSON:
-        printer = JsonScenarioAttacksPrinter(sink=sink or get_default_sink(StdoutSink))
-    else:
-        raise ValueError(f"Unsupported format for scenario attacks: {resolved_format.value!r}.")
-    await printer.write_async(payload)
-
-
-async def output_scenario_technique_metrics_async(
-    result: ScenarioResult,
-    *,
-    format: ScenarioResultOutputFormat | str = ScenarioResultOutputFormat.PRETTY,  # noqa: A002
-    sink: Sink | None = None,
-) -> None:
-    """
-    Render technique metrics from a memory- or REST-sourced scenario result.
-
-    Args:
-        result (ScenarioResult): The already-fetched scenario result.
-        format (ScenarioResultOutputFormat | str): Output format. Defaults to PRETTY.
-        sink (Sink | None): Output sink. Defaults to StdoutSink.
-
-    Raises:
-        ValueError: If ``format`` is not supported.
-    """
-    resolved_format = ScenarioResultOutputFormat(format)
-    payload = build_technique_metrics_payload(result=result)
-    if resolved_format is ScenarioResultOutputFormat.PRETTY:
-        printer = PrettyScenarioTechniqueMetricsPrinter(sink=sink or get_default_sink(StdoutSink))
-    elif resolved_format is ScenarioResultOutputFormat.JSON:
-        printer = JsonScenarioTechniqueMetricsPrinter(sink=sink or get_default_sink(StdoutSink))
-    elif resolved_format is ScenarioResultOutputFormat.CSV:
-        printer = CsvScenarioTechniqueMetricsPrinter(sink=sink or get_default_sink(StdoutSink))
-    else:
-        raise ValueError(f"Unsupported format for scenario technique metrics: {resolved_format.value!r}.")
-    await printer.write_async(payload)
 
 
 async def output_scorer_async(

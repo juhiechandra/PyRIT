@@ -22,12 +22,9 @@ from pyrit.common.lazy_imports import get_lazy_dir, resolve_lazy_export
 if TYPE_CHECKING:
     from pyrit.output.base import PrinterBase
     from pyrit.output.helpers import (
-        ScenarioResultOutputFormat,
         output_attack_async,
         output_conversation_async,
         output_scenario_async,
-        output_scenario_attacks_async,
-        output_scenario_technique_metrics_async,
         output_score_async,
         output_scorer_async,
     )
@@ -38,12 +35,9 @@ _LAZY_EXPORTS: dict[str, str | tuple[str, str | None]] = {
     "get_default_sink": "pyrit.output.sink",
     "IPythonMarkdownSink": "pyrit.output.sink",
     "OutputFormat": "pyrit.output.sink",
-    "ScenarioResultOutputFormat": "pyrit.output.helpers",
     "output_attack_async": "pyrit.output.helpers",
     "output_conversation_async": "pyrit.output.helpers",
-    "output_scenario_attacks_async": "pyrit.output.helpers",
     "output_scenario_async": "pyrit.output.helpers",
-    "output_scenario_technique_metrics_async": "pyrit.output.helpers",
     "output_score_async": "pyrit.output.helpers",
     "output_scorer_async": "pyrit.output.helpers",
     "PrinterBase": "pyrit.output.base",

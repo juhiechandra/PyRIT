@@ -1433,21 +1433,6 @@ class TestScenarioResults:
         assert rc == 0
         assert "extract data" in capsys.readouterr().out
 
-    def test_handle_results_attacks_disables_colors_for_redirected_output(self):
-        import asyncio
-
-        client = AsyncMock()
-        client.get_scenario_run_results_async.return_value = _make_scenario_result()
-        parsed = pyrit_scan.parse_args(["scenario-results", "SID", "--view", "attacks"])
-        with (
-            patch("pyrit.output.output_scenario_attacks_async", new_callable=AsyncMock) as mock_output,
-            patch.object(pyrit_scan.sys.stdout, "isatty", return_value=False),
-        ):
-            rc = asyncio.run(pyrit_scan._handle_results_async(client=client, parsed_args=parsed))
-
-        assert rc == 0
-        assert mock_output.await_args.kwargs["enable_colors"] is False
-
     def test_handle_results_conversations_fetches_and_prints(self, capsys):
         import asyncio
 
