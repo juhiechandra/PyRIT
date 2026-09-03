@@ -132,7 +132,6 @@ const ATTEMPT: ScenarioProgressResult = {
     score_value: 'true',
     score_rationale: 'The response achieved the objective.',
   },
-  technique_details: TECHNIQUE_DETAILS,
 }
 
 const SUMMARY: ScenarioProgressSummary = {
@@ -205,6 +204,7 @@ const SUMMARY: ScenarioProgressSummary = {
     atomic_attack_name: 'attack-technique',
     display_group: 'Technique One',
     status: 'RUNNING',
+    technique_details: TECHNIQUE_DETAILS,
     completed: 1,
     planned: 1,
     succeeded: 1,
@@ -468,7 +468,7 @@ describe('ScenarioRunPage', () => {
     await user.click(screen.getByRole('button', { name: 'Expand attacks in Technique One' }))
     const detailsRow = screen.getByRole('row', { name: 'View details for attack-technique' })
 
-    await user.click(detailsRow)
+    fireEvent.click(detailsRow)
     await waitFor(() => expect(screen.getByTestId('scanner-route')).toHaveAttribute(
       'data-location',
       `/scanner-history/${SCENARIO_RESULT_ID}/attack-result-1`,
@@ -525,7 +525,7 @@ describe('ScenarioRunPage', () => {
     const firstBodyRow = within(executionsTable).getAllByRole('row')[1]
     expect(within(firstBodyRow).queryByRole('link')).not.toBeInTheDocument()
     await user.click(firstBodyRow)
-    expect(screen.getByRole('dialog', { name: 'attack-technique' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'attack-technique' })).toBeInTheDocument()
     expect(screen.getByTestId('scanner-route')).toHaveAttribute(
       'data-location',
       `/scanner-history/${SCENARIO_RESULT_ID}/attack-result-1`,

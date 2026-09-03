@@ -713,7 +713,6 @@ export interface ScenarioProgressResult {
   error_type?: string | null
   error_message?: string | null
   score?: ScenarioProgressScore | null
-  technique_details?: ScenarioAttackTechniqueDetails | null
 }
 
 export interface ScenarioRunPlanSeedGroup {
@@ -784,6 +783,7 @@ export interface ScenarioAtomicGroupProgress extends ScenarioProgressCounts {
   atomic_attack_name: string
   display_group: string
   status: 'RUNNING' | 'PENDING' | 'INCOMPLETE' | 'COMPLETED'
+  technique_details?: ScenarioAttackTechniqueDetails | null
 }
 
 export interface ScenarioObjectiveScorerMetrics {

@@ -1456,6 +1456,67 @@ def test_get_progress_cache_only_maps_new_storage_rows(mock_memory) -> None:
     assert second_cursor.attack_result_id == deltas[0].attack_result_id
 
 
+def test_get_progress_cache_refreshes_identifier_enriched_after_insert(mock_memory) -> None:
+    plan = ScenarioRunPlan(
+        atomic_groups=[
+            ScenarioRunPlanAtomicGroup(
+                id="group",
+                atomic_attack_name="attack",
+                display_group="Attack",
+                technique_eval_hash="eval",
+                seed_group_ids=["seed"],
+            )
+        ],
+        seed_groups=[ScenarioRunPlanSeedGroup(id="seed", objective_sha256="sha", objective="objective")],
+    )
+    header = make_scenario_result(
+        attack_results={},
+        metadata={SCENARIO_RUN_PLAN_METADATA_KEY: plan.model_dump(mode="json")},
+    )
+    attack_identifier = ComponentIdentifier(class_name="PromptSendingAttack", class_module="tests")
+    pre_enrichment = ScenarioAttackResultDelta(
+        attack_result_id=str(uuid.uuid4()),
+        conversation_id="conversation",
+        objective="objective",
+        outcome=AttackOutcome.SUCCESS,
+        execution_time_ms=10,
+        timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        atomic_attack_identifier=AtomicAttackIdentifier.build(attack_identifier=attack_identifier),
+        attribution_data={
+            "parent_collection": "attack",
+            "parent_eval_hash": "eval",
+            "seed_group_id": "seed",
+        },
+    )
+    post_enrichment = pre_enrichment.model_copy(
+        update={
+            "atomic_attack_identifier": AtomicAttackIdentifier.build(
+                technique_identifier=ComponentIdentifier(
+                    class_name="AttackTechnique",
+                    class_module="tests",
+                    children={"attack": attack_identifier},
+                ),
+                seed_group=AttackSeedGroup(seeds=[SeedObjective(value="objective")]),
+            )
+        }
+    )
+    mock_memory.get_scenario_result_header.return_value = header
+    mock_memory.get_scenario_attack_result_deltas.side_effect = [
+        ([pre_enrichment], False),
+        ([post_enrichment], False),
+    ]
+    service = ScenarioRunService()
+
+    first = service.get_run_progress(scenario_result_id=str(header.id), since=None, limit=25)
+    second = service.get_run_progress(scenario_result_id=str(header.id), since=None, limit=25)
+
+    assert first is not None
+    assert second is not None
+    assert first.summary.atomic_groups[0].technique_details is None
+    assert second.summary.atomic_groups[0].technique_details is not None
+    assert mock_memory.get_scenario_attack_result_deltas.call_args_list[1].kwargs["cursor"] is None
+
+
 def test_get_progress_rejects_duplicate_stored_plan_groups(mock_memory) -> None:
     group = ScenarioRunPlanAtomicGroup(
         id="duplicate",
@@ -1515,7 +1576,7 @@ def test_progress_prefers_persisted_logical_seed_group_attribution() -> None:
     assert mapped.seed_group_id == "canonical-seed-id"
 
 
-def test_progress_builds_attack_technique_details() -> None:
+def test_progress_builds_attack_technique_details_once_per_atomic_group() -> None:
     inner_objective_target = ComponentIdentifier(
         class_name="OpenAIChatTarget",
         class_module="tests",
@@ -1572,17 +1633,25 @@ def test_progress_builds_attack_technique_details() -> None:
         outcome=AttackOutcome.SUCCESS,
         execution_time_ms=10,
         timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
-        atomic_attack_identifier=AtomicAttackIdentifier.build(technique_identifier=technique_identifier),
+        atomic_attack_identifier=AtomicAttackIdentifier.build(
+            technique_identifier=technique_identifier,
+            seed_group=AttackSeedGroup(seeds=[SeedObjective(value="objective")]),
+        ),
     )
 
     mapped = ScenarioRunService._map_progress_delta(
         delta=delta,
         plan_lookup=_svc_mod._ScenarioPlanLookup.from_plan(plan=None),
     )
+    details_by_group = ScenarioRunService._build_technique_details_by_group(
+        deltas=[delta],
+        results=[mapped],
+    )
+    details = details_by_group[mapped.atomic_group_id]
 
-    assert mapped.technique_details is not None
-    assert mapped.technique_details.component_name == "AttackTechnique"
-    projected_attack = mapped.technique_details.children["attack"][0]
+    assert "technique_details" not in mapped.model_dump()
+    assert details.component_name == "AttackTechnique"
+    projected_attack = details.children["attack"][0]
     assert projected_attack.component_name == "PromptSendingAttack"
     assert projected_attack.parameters == {"max_turns": 1}
     assert "objective_scorer" not in projected_attack.children
@@ -1593,7 +1662,7 @@ def test_progress_builds_attack_technique_details() -> None:
         "temperature": 0.7,
         "top_p": 0.9,
     }
-    assert mapped.technique_details.children["technique_seeds"][0].parameters == {
+    assert details.children["technique_seeds"][0].parameters == {
         "value": "Use this jailbreak.",
         "data_type": "text",
     }
@@ -1761,7 +1830,12 @@ def test_progress_summary_uses_latest_attempt_for_backend_owned_counts() -> None
     target_identifier = ComponentIdentifier(
         class_name="OpenAIChatTarget",
         class_module="tests",
-        params={"model_name": "gpt-test", "temperature": 0.2, "hidden": "not displayed"},
+        params={
+            "endpoint": "https://example.com",
+            "model_name": "gpt-test",
+            "temperature": 0.2,
+            "max_requests_per_minute": 60,
+        },
     )
     sub_scorer_identifier = ComponentIdentifier(
         class_name="SubScorer",
@@ -1799,6 +1873,7 @@ def test_progress_summary_uses_latest_attempt_for_backend_owned_counts() -> None
             active_group_ids=["group"],
             terminal=False,
             objective_scorer_identifier=scorer_identifier,
+            technique_details_by_group={},
         )
 
     assert summary.overall.completed == 2
@@ -1819,7 +1894,10 @@ def test_progress_summary_uses_latest_attempt_for_backend_owned_counts() -> None
         "float_scale_aggregator": "max",
     }
     assert summary.objective_scorer.children["prompt_target"][0].component_name == "OpenAIChatTarget"
-    assert summary.objective_scorer.children["prompt_target"][0].parameters["model_name"] == "gpt-test"
+    assert summary.objective_scorer.children["prompt_target"][0].parameters == {
+        "underlying_model_name": "gpt-test",
+        "temperature": 0.2,
+    }
     assert summary.objective_scorer.children["sub_scorers"][0].component_name == "SubScorer"
     assert summary.objective_scorer.metrics is not None
     assert summary.objective_scorer.metrics.accuracy == 0.95

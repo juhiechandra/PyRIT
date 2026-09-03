@@ -53,6 +53,7 @@ from pyrit.models import (
     ScenarioSeedGroupProgress,
     ScenarioTechniqueProgress,
     ScorerEvaluationIdentifier,
+    ScorerIdentifier,
     config_hash,
     project_behavioral_identity,
 )
@@ -110,7 +111,7 @@ class _ResultUnitIdentity:
 
 @dataclass
 class _ProgressCacheEntry:
-    """Append-only mapped progress state for one scenario run."""
+    """Mapped progress state for one scenario run."""
 
     plan_signature: str | None = None
     deltas: list[ScenarioAttackResultDelta] = field(default_factory=list)
@@ -934,6 +935,14 @@ class ScenarioRunService:
         plan_signature = plan.model_dump_json() if plan is not None else None
         with self._progress_cache_lock:
             entry = self._progress_cache.get(scenario_result_id)
+            if entry is not None and entry.plan_signature == plan_signature:
+                has_unenriched_identifier = any(
+                    delta.atomic_attack_identifier is not None and not delta.atomic_attack_identifier.seed_identifiers
+                    for delta in entry.deltas
+                )
+                was_terminal = entry.summary_state is not None and entry.summary_state[1]
+                if has_unenriched_identifier and (not terminal or not was_terminal):
+                    entry = None
             if entry is None or entry.plan_signature != plan_signature:
                 entry = _ProgressCacheEntry(plan_signature=plan_signature)
                 self._progress_cache[scenario_result_id] = entry
@@ -970,6 +979,10 @@ class ScenarioRunService:
 
             summary_state = (tuple(active_group_ids), terminal, plan_complete)
             if entry.summary is None or first_new_index < len(entry.deltas) or entry.summary_state != summary_state:
+                technique_details_by_group = self._build_technique_details_by_group(
+                    deltas=entry.deltas,
+                    results=entry.results,
+                )
                 entry.summary = self._build_progress_summary(
                     plan=summary_plan,
                     plan_complete=plan_complete,
@@ -977,6 +990,7 @@ class ScenarioRunService:
                     active_group_ids=active_group_ids,
                     terminal=terminal,
                     objective_scorer_identifier=objective_scorer_identifier,
+                    technique_details_by_group=technique_details_by_group,
                 )
                 entry.summary_state = summary_state
 
@@ -988,6 +1002,33 @@ class ScenarioRunService:
             )
 
     @staticmethod
+    def _build_technique_details_by_group(
+        *,
+        deltas: Sequence[ScenarioAttackResultDelta],
+        results: Sequence[ScenarioProgressResult],
+    ) -> dict[str, ScenarioAttackTechniqueDetails]:
+        """
+        Build one technique-details projection for each enriched atomic group.
+
+        Returns:
+            Details keyed by atomic group ID.
+        """
+        details_by_group: dict[str, ScenarioAttackTechniqueDetails] = {}
+        for delta, result in zip(deltas, results, strict=True):
+            atomic_identifier = delta.atomic_attack_identifier
+            if (
+                result.atomic_group_id in details_by_group
+                or atomic_identifier is None
+                or not atomic_identifier.seed_identifiers
+                or atomic_identifier.attack_technique is None
+            ):
+                continue
+            details_by_group[result.atomic_group_id] = ScenarioRunService._build_attack_technique_details(
+                technique_identifier=atomic_identifier.attack_technique
+            )
+        return details_by_group
+
+    @staticmethod
     def _build_progress_summary(
         *,
         plan: ScenarioRunPlan,
@@ -996,6 +1037,7 @@ class ScenarioRunService:
         active_group_ids: Sequence[str],
         terminal: bool,
         objective_scorer_identifier: ComponentIdentifier | None,
+        technique_details_by_group: dict[str, ScenarioAttackTechniqueDetails],
     ) -> ScenarioProgressSummary:
         """
         Build canonical progress rollups from a plan and persisted attempts.
@@ -1093,6 +1135,7 @@ class ScenarioRunService:
                     atomic_attack_name=group.atomic_attack_name,
                     display_group=group.display_group,
                     status=group_status,
+                    technique_details=technique_details_by_group.get(group.id),
                     **counts.model_dump(),
                 )
             )
@@ -1228,7 +1271,11 @@ class ScenarioRunService:
         Returns:
             ScenarioScorerIdentity: Scorer parameters and nested component identities.
         """
-        identity = ScenarioRunService._build_component_identity(component_identifier=scorer_identifier)
+        projected = project_behavioral_identity(
+            scorer_identifier,
+            identifier_type=ScorerIdentifier,
+        )
+        identity = ScenarioRunService._build_component_identity(component_identifier=projected)
         return ScenarioScorerIdentity(
             component_name=identity.component_name,
             parameters=identity.parameters,
@@ -1395,14 +1442,6 @@ class ScenarioRunService:
             error_type=delta.error_type,
             error_message=delta.error_message,
             score=delta.score,
-            technique_details=(
-                ScenarioRunService._build_attack_technique_details(
-                    technique_identifier=delta.atomic_attack_identifier.attack_technique
-                )
-                if delta.atomic_attack_identifier is not None
-                and delta.atomic_attack_identifier.attack_technique is not None
-                else None
-            ),
         )
 
     @staticmethod

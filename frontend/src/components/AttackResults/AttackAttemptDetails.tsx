@@ -5,6 +5,7 @@ import { ChevronDownRegular, ChevronUpRegular } from '@fluentui/react-icons'
 import { Link } from 'react-router'
 
 import type {
+  ScenarioAttackTechniqueDetails,
   ScenarioComponentIdentity,
   ScenarioObjectiveScorer,
   ScenarioProgressResult,
@@ -40,6 +41,8 @@ interface AttackAttemptDetailsProps {
   readonly objective?: string | null
   /** Planned group the attempt belongs to, used for technique identity. */
   readonly atomicGroup?: ScenarioRunPlanAtomicGroup | null
+  /** Projected technique details shared by every attempt in the atomic group. */
+  readonly techniqueDetails?: ScenarioAttackTechniqueDetails | null
   /** Scorer that decided attack success. */
   readonly objectiveScorer?: ScenarioObjectiveScorer | null
   /** Route to the attempt's conversation. Supplied by the host so this stays route-agnostic. */
@@ -50,6 +53,7 @@ export default function AttackAttemptDetails({
   attempt,
   objective,
   atomicGroup,
+  techniqueDetails,
   objectiveScorer,
   conversationPath,
 }: AttackAttemptDetailsProps) {
@@ -101,9 +105,9 @@ export default function AttackAttemptDetails({
               ))}
             </div>
           )}
-          {attempt.technique_details && (
+          {techniqueDetails && (
             <ComponentIdentityDetails
-              identity={attempt.technique_details}
+              identity={techniqueDetails}
               hideComponentName
               renderChild={renderTechniqueSeed}
             />

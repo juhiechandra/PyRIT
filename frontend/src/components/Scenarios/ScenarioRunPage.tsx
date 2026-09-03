@@ -120,6 +120,10 @@ function ScenarioRunPageContent({ scenarioResultId, attackResultId }: ScenarioRu
     () => new Map(state.plan?.atomic_groups.map((group) => [group.id, group]) ?? []),
     [state.plan],
   )
+  const progressAtomicGroups = useMemo(
+    () => new Map(state.summary?.atomic_groups.map((group) => [group.id, group]) ?? []),
+    [state.summary],
+  )
   const selectedAttempt = useMemo(
     () => state.results.find((attempt) => attempt.attack_result_id === attackResultId) ?? null,
     [attackResultId, state.results],
@@ -616,6 +620,7 @@ function ScenarioRunPageContent({ scenarioResultId, attackResultId }: ScenarioRu
                   attempt={selectedAttempt}
                   objective={seedObjectives.get(selectedAttempt.seed_group_id) ?? null}
                   atomicGroup={selectedAttemptGroup}
+                  techniqueDetails={progressAtomicGroups.get(selectedAttempt.atomic_group_id)?.technique_details}
                   objectiveScorer={objectiveScorer}
                   conversationPath={attackConversationRoutePath(
                     selectedAttempt.attack_result_id,

@@ -3976,9 +3976,13 @@ class MemoryInterface(abc.ABC):
             )
             score = None
             if row.score_id is not None:
-                scorer_identifier = ComponentIdentifier.model_validate(row.scorer_class_identifier)
+                scorer_identifier = (
+                    ComponentIdentifier.model_validate(row.scorer_class_identifier)
+                    if row.scorer_class_identifier
+                    else None
+                )
                 score = ScenarioProgressScore(
-                    scorer_name=scorer_identifier.class_name or "Unknown",
+                    scorer_name=scorer_identifier.class_name if scorer_identifier else "Unknown",
                     score_type=row.score_type,
                     status=ScoreStatus(row.score_status),
                     score_value=row.score_value,

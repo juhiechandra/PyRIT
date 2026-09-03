@@ -140,7 +140,6 @@ class ScenarioProgressResult(BaseModel):
     error_type: str | None = None
     error_message: str | None = None
     score: ScenarioProgressScore | None = None
-    technique_details: ScenarioAttackTechniqueDetails | None = None
 
 
 class ScenarioProgressCounts(BaseModel):
@@ -190,6 +189,7 @@ class ScenarioAtomicGroupProgress(ScenarioProgressCounts):
     atomic_attack_name: str
     display_group: str
     status: Literal["RUNNING", "PENDING", "INCOMPLETE", "COMPLETED"]
+    technique_details: ScenarioAttackTechniqueDetails | None = None
 
 
 class ScenarioObjectiveScorerMetrics(BaseModel):
