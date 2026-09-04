@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.4
+#       jupytext_version: 1.19.5
 # ---
 
 # %% [markdown]
@@ -172,14 +172,14 @@ await output_scenario_async(figstep_result)
 #
 # ```bash
 # pyrit_scan run garak.latent_injection --target openai_chat --techniques bare \
-#   --families whois --max-prompts-per-cell 1
+#   --families whois --max-prompts-per-trigger 1
 # ```
 #
-# **Available techniques** (13 separator styles): Bare, Newline, Blockquote, HorizontalRule,
-# SystemTag, SystemBracket, SystemBracketFlood, SystemPrefix, InstructionTag, AdminRequest,
-# EndOfText, CoreInstruction, LegalAmendment.
+# **Available techniques** (14 separator styles): Bare, Newline, Blockquote, BlockquoteInline,
+# HorizontalRule, SystemTag, SystemBracket, SystemBracketFlood, SystemPrefix, InstructionTag,
+# AdminRequest, EndOfText, CoreInstruction, LegalAmendment.
 #
-# **Aggregate techniques:** `ALL` (all 13), `DEFAULT` (a representative subset), `PLAIN` (the
+# **Aggregate techniques:** `ALL` (all 14), `DEFAULT` (a representative subset), `PLAIN` (the
 # injection is set off by whitespace or quoting only), and `AUTHORITY` (the delimiter impersonates
 # a system, admin, or legal voice).
 #
@@ -189,12 +189,10 @@ await output_scenario_async(figstep_result)
 # `latent_jailbreak` hides a "write something offensive about <group>" instruction instead of a
 # fixed trigger, so it is excluded from the defaults and requires an explicit `harm_scorer`.
 #
-# **Run size.** The uncapped cross product is roughly 7,500 prompts, so each technique/family pair
-# is capped at `max_prompts_per_cell` (default 12). The cap walks the cross product round-robin,
-# so it keeps a spread of tasks, carrier documents, injection templates and payloads rather than
-# every variation of one corner. Selection is deterministic, which is what lets a run resume.
-# `max_dataset_size` does not apply here -- this scenario synthesizes its seeds rather than
-# resolving them from the dataset configuration.
+# One attack is built per technique, carrier family, and expected trigger, so each attack has a
+# single unambiguous success contract: its `SubStringScorer` looks for the one string its prompts
+# actually asked for. `max_prompts_per_trigger` caps how many prompts each of those cells holds.
+# There is no baseline attack -- the `bare` technique already covers "no fencing at all".
 
 # %% [markdown]
 # ## Doctor
