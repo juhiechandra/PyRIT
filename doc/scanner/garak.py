@@ -155,6 +155,48 @@ await output_scenario_async(figstep_result)
 # probes), `EXFIL` (the 6 markdown-exfil probes), and `XSS` (TaskXSS + MarkdownXSS).
 
 # %% [markdown]
+# ## LatentInjection
+#
+# Ports Garak's `latentinjection` probe family: indirect prompt injection, where the attacker
+# never talks to the model but plants an instruction inside a document the model is asked to read
+# -- a resume, a financial report, a legal filing, a WHOIS record. The attack succeeds when the
+# response echoes the trigger text the injection asked for, which `SubStringScorer` checks
+# directly.
+#
+# Each prompt is assembled from four local datasets -- a benign task instruction, a carrier
+# document, an injection instruction, and a payload carrying the trigger -- fenced together by the
+# separator that the selected technique names. One attack is built per technique and carrier
+# family, scored by an OR composite over that family's triggers.
+#
+# **CLI example:**
+#
+# ```bash
+# pyrit_scan run garak.latent_injection --target openai_chat --techniques bare \
+#   --families whois --max-prompts-per-cell 1
+# ```
+#
+# **Available techniques** (13 separator styles): Bare, Newline, Blockquote, HorizontalRule,
+# SystemTag, SystemBracket, SystemBracketFlood, SystemPrefix, InstructionTag, AdminRequest,
+# EndOfText, CoreInstruction, LegalAmendment.
+#
+# **Aggregate techniques:** `ALL` (all 13), `DEFAULT` (a representative subset), `PLAIN` (the
+# injection is set off by whitespace or quoting only), and `AUTHORITY` (the delimiter impersonates
+# a system, admin, or legal voice).
+#
+# **Carrier families** are seed metadata rather than techniques, selected with the `families` run
+# parameter: `translation_fr`, `translation_zh`, `report`, `resume`, `fact_eiffel`, `fact_legal`,
+# `whois`, `whois_snippet`, and `latent_jailbreak`. Every technique applies to every family.
+# `latent_jailbreak` hides a "write something offensive about <group>" instruction instead of a
+# fixed trigger, so it is excluded from the defaults and requires an explicit `harm_scorer`.
+#
+# **Run size.** The uncapped cross product is roughly 7,500 prompts, so each technique/family pair
+# is capped at `max_prompts_per_cell` (default 12). The cap walks the cross product round-robin,
+# so it keeps a spread of tasks, carrier documents, injection templates and payloads rather than
+# every variation of one corner. Selection is deterministic, which is what lets a run resume.
+# `max_dataset_size` does not apply here -- this scenario synthesizes its seeds rather than
+# resolving them from the dataset configuration.
+
+# %% [markdown]
 # ## Doctor
 #
 # Ports Garak's `doctor` probe, which implements the HiddenLayer Policy Puppetry universal bypass:
