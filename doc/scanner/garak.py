@@ -36,6 +36,8 @@ from pyrit.scenario.garak import (
     Encoding,
     EncodingTechnique,
     FigStep,
+    LatentInjection,
+    LatentInjectionTechnique,
     PackageHallucination,
     PackageHallucinationTechnique,
     SystemPromptExtraction,
@@ -217,6 +219,22 @@ await output_scenario_async(web_injection_result)
 # single unambiguous success contract: its `SubStringScorer` looks for the one string its prompts
 # actually asked for. `max_prompts_per_trigger` caps how many prompts each of those cells holds.
 # There is no baseline attack -- the `bare` technique already covers "no fencing at all".
+
+# %%
+latent_injection_scenario = LatentInjection(max_prompts_per_trigger=1)
+latent_injection_scenario.set_params_from_args(  # type: ignore
+    args={
+        "objective_target": objective_target,
+        "scenario_techniques": [LatentInjectionTechnique.Bare],
+        "families": ["whois"],
+    }
+)
+await latent_injection_scenario.initialize_async()  # type: ignore
+
+latent_injection_result = await latent_injection_scenario.run_async()  # type: ignore
+
+# %%
+await output_scenario_async(latent_injection_result)
 
 # %% [markdown]
 # ## Doctor
